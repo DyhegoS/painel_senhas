@@ -1,0 +1,34 @@
+{
+  "name": "painel-senhas",
+  "version": "1.0.0",
+  "description": "Sistema de Painel de Senhas - Gerenciamento de Filas",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install && cd backend && npm install && cd ../web-attendant && npm install && cd ../web-panel && npm install && cd ../mobile && npm install",
+    "dev:backend": "cd backend && npm run dev",
+    "dev:web-attendant": "cd web-attendant && npm start",
+    "dev:web-panel": "cd web-panel && npm start",
+    "dev:mobile": "cd mobile && npm start",
+    "start:backend": "cd backend && npm start",
+    "build:web-attendant": "cd web-attendant && npm run build",
+    "build:web-panel": "cd web-panel && npm run build",
+    "test:backend": "cd backend && npm test",
+    "seed": "cd backend && node seed.js",
+    "lint": "npm run lint --prefix backend && npm run lint --prefix web-attendant && npm run lint --prefix web-panel",
+    "format": "prettier --write \"**/*.{js,jsx,ts,tsx,json,css,md}\"",
+    "docker:up": "docker-compose up -d",
+    "docker:down": "docker-compose down",
+    "docker:logs": "docker-compose logs -f"
+  },
+  "keywords": [
+    "senhas",
+    "fila",
+    "atendimento",
+    "gerenciamento"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "prettier": "^3.0.0"
+  }
+}

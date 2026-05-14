@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  mongodb:
+    image: mongo:7.0
+    container_name: painel_senhas_mongo
+    ports:
+      - '27017:27017'
+    environment:
+      MONGO_INITDB_DATABASE: painel_senhas
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - painel_network
+
+  backend:
+    build: ./backend
+    container_name: painel_senhas_backend
+    ports:
+      - '5000:5000'
+    depends_on:
+      - mongodb
+    environment:
+      MONGODB_URI: mongodb://mongodb:27017/painel_senhas
+      NODE_ENV: development
+    networks:
+      - painel_network
+    volumes:
+      - ./backend:/app
+
+volumes:
+  mongodb_data:
+
+networks:
+  painel_network:
+    driver: bridge

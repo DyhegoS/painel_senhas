@@ -1,0 +1,159 @@
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0;
+  background-color: #fff;
+  min-height: 100vh;
+}
+
+.header {
+  background-color: #0066cc;
+  color: #fff;
+  padding: 20px;
+  text-align: center;
+}
+
+.header h1 {
+  margin: 0;
+  font-size: 28px;
+}
+
+.main-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  padding: 20px;
+}
+
+.current-ticket {
+  background-color: #f9f9f9;
+  border-radius: 10px;
+  padding: 30px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.current-ticket h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.ticket-display {
+  text-align: center;
+}
+
+.ticket-number {
+  font-size: 72px;
+  font-weight: bold;
+  color: #0066cc;
+  margin: 30px 0;
+}
+
+.ticket-service {
+  font-size: 18px;
+  color: #666;
+  margin-bottom: 30px;
+}
+
+.no-ticket {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.no-ticket p {
+  font-size: 16px;
+  color: #999;
+  margin-bottom: 20px;
+}
+
+.queue-section {
+  background-color: #f9f9f9;
+  border-radius: 10px;
+  padding: 30px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.queue-section h2 {
+  margin-bottom: 20px;
+  color: #333;
+}
+
+.queue-list {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.queue-item {
+  display: grid;
+  grid-template-columns: 60px 80px 1fr;
+  gap: 15px;
+  align-items: center;
+  padding: 15px;
+  background-color: #fff;
+  border-bottom: 1px solid #eee;
+  border-radius: 5px;
+  margin-bottom: 10px;
+}
+
+.position {
+  font-weight: bold;
+  color: #0066cc;
+  font-size: 16px;
+}
+
+.ticket {
+  font-weight: bold;
+  font-size: 18px;
+  color: #333;
+}
+
+.service {
+  color: #666;
+  font-size: 14px;
+}
+
+.empty-message {
+  text-align: center;
+  color: #999;
+  padding: 40px 0;
+}
+
+.btn {
+  padding: 12px 24px;
+  border: none;
+  border-radius: 5px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background-color: #0066cc;
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background-color: #0052a3;
+}
+
+.btn-success {
+  background-color: #28a745;
+  color: #fff;
+  width: 100%;
+  margin-top: 20px;
+}
+
+.btn-success:hover {
+  background-color: #218838;
+}
+
+.btn-large {
+  font-size: 18px;
+  padding: 16px 32px;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    grid-template-columns: 1fr;
+  }
+}
