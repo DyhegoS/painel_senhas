@@ -12,7 +12,7 @@
 ### 1️⃣ Clonar o Projeto
 
 ```bash
-cd c:\Users\wksdyhego.s\Documents\projects\painel_senhas
+cd c:\Users\nome usuario\Documents\projects\painel_senhas
 ```
 
 ### 2️⃣ Configurar Backend

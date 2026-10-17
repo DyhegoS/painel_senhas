@@ -31,6 +31,7 @@ body {
 
 /* CURRENT SECTION */
 .current-section {
+  position: relative;
   background: radial-gradient(circle, #1a1a1a 0%, #0d0d0d 100%);
   border: 3px solid #ffd700;
   border-radius: 15px;
@@ -38,6 +39,38 @@ body {
   display: flex;
   flex-direction: column;
   justify-content: space-around;
+}
+
+.audio-control {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+}
+
+.audio-control button {
+  border: 1px solid #ffd700;
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: #1a1a1a;
+  color: #ffd700;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.audio-control button:hover {
+  background: #333;
+}
+
+.audio-control span {
+  max-width: 240px;
+  color: #ffb4a8;
+  font-size: 12px;
+  text-align: right;
 }
 
 .current-ticket {
