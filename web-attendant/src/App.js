@@ -3,8 +3,8 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import './App.css';
 
-const API_URL = 'http://localhost:5000/api';
-const SOCKET_URL = 'http://localhost:5000';
+const API_URL = 'http://192.168.50.8:5000/api';
+const SOCKET_URL = 'http://192.168.50.8:5000';
 
 function App() {
   const [queue, setQueue] = useState([]);

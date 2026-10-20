@@ -14,6 +14,7 @@ const server = http.createServer(app);
 const io = socketIO(server, {
   cors: { origin: '*' },
 });
+app.set('io', io);
 
 // Middlewares
 app.use(cors());
@@ -39,6 +40,7 @@ const connectedClients = {
   attendants: [],
   panels: [],
   customers: [],
+  printers: [],
 };
 
 io.on('connection', (socket) => {
@@ -56,6 +58,10 @@ io.on('connection', (socket) => {
     } else if (type === 'customer') {
       connectedClients.customers.push(socket.id);
       console.log(`✓ Cliente conectado. Total: ${connectedClients.customers.length}`);
+    } else if (type === 'printer') {
+      connectedClients.printers.push(socket.id);
+      socket.join('printers');
+      console.log(`🖨️  Impressora conectada. Total: ${connectedClients.printers.length}`);
     }
   });
 
@@ -82,6 +88,7 @@ io.on('connection', (socket) => {
     connectedClients.attendants = connectedClients.attendants.filter((id) => id !== socket.id);
     connectedClients.panels = connectedClients.panels.filter((id) => id !== socket.id);
     connectedClients.customers = connectedClients.customers.filter((id) => id !== socket.id);
+    connectedClients.printers = connectedClients.printers.filter((id) => id !== socket.id);
   });
 });
 

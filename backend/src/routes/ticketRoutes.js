@@ -2,12 +2,31 @@ const express = require('express');
 const router = express.Router();
 const ticketController = require('../controllers/ticketController');
 
+const PRINT_TIMEOUT_MS = 8000;
+
+// Envia a senha para os agentes de impressão (Raspberry Pi) e aguarda a confirmação
+async function sendToPrinter(io, ticket) {
+  if (!io) return 'no_printer';
+  try {
+    const responses = await io
+      .to('printers')
+      .timeout(PRINT_TIMEOUT_MS)
+      .emitWithAck('print_ticket', ticket);
+    if (responses.length === 0) return 'no_printer';
+    return responses.some((r) => r && r.ok) ? 'printed' : 'error';
+  } catch (error) {
+    console.error('Erro ao imprimir senha:', error.message);
+    return 'error';
+  }
+}
+
 // Gerar nova senha
 router.post('/generate', async (req, res) => {
   try {
     const { serviceTypeId } = req.body;
     const ticket = await ticketController.generateTicket(serviceTypeId);
-    res.status(201).json(ticket);
+    const printStatus = await sendToPrinter(req.app.get('io'), ticket);
+    res.status(201).json({ ...ticket, printStatus });
   } catch (error) {
     res.status(400).json({ error: error.message });
   }

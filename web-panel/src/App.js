@@ -5,6 +5,9 @@ import './App.css';
 const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || `http://${window.location.hostname}:5000`;
 const COUNTER_NUMBER = '1';
 const AUDIO_BASE = `${process.env.PUBLIC_URL}/audio`;
+const PLACE_NAME = process.env.REACT_APP_PLACE_NAME || 'Sala de Espera';
+const LOGO_URL = process.env.REACT_APP_LOGO_URL || '';
+const HIGHLIGHT_DURATION_MS = 8000;
 
 function App() {
   const [calledTickets, setCalledTickets] = useState([]);
@@ -12,6 +15,11 @@ function App() {
   const [nextTickets, setNextTickets] = useState([]);
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioMessage, setAudioMessage] = useState('');
+  const [now, setNow] = useState(() => new Date());
+  const [isHighlighted, setIsHighlighted] = useState(false);
+  const [callKey, setCallKey] = useState(0);
+  const [logoFailed, setLogoFailed] = useState(false);
+  const highlightTimerRef = useRef(null);
   const audioContextRef = useRef(null);
   const audioPlayerRef = useRef(null);
   const announcementTimerRef = useRef(null);
@@ -106,7 +114,7 @@ function App() {
   };
 
   const addToCalledTickets = useCallback((ticket) => {
-    setCalledTickets((prev) => [ticket, ...prev.slice(0, 4)]);
+    setCalledTickets((prev) => [ticket, ...prev.slice(0, 5)]);
   }, []);
 
   useEffect(() => {
@@ -115,6 +123,10 @@ function App() {
     socket.on('ticket_called', (ticket) => {
       setCurrentTicket(ticket);
       addToCalledTickets(ticket);
+      setCallKey((key) => key + 1);
+      setIsHighlighted(true);
+      window.clearTimeout(highlightTimerRef.current);
+      highlightTimerRef.current = window.setTimeout(() => setIsHighlighted(false), HIGHLIGHT_DURATION_MS);
       if (audioEnabledRef.current) {
         playBeep();
         window.clearTimeout(announcementTimerRef.current);
@@ -129,9 +141,15 @@ function App() {
     return () => socket.disconnect();
   }, [addToCalledTickets, playBeep, playTicketAudio]);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   useEffect(
     () => () => {
       window.clearTimeout(announcementTimerRef.current);
+      window.clearTimeout(highlightTimerRef.current);
       if (audioPlayerRef.current) {
         audioPlayerRef.current.pause();
       }
@@ -144,51 +162,75 @@ function App() {
     []
   );
 
+  const recentTickets = calledTickets.slice(1);
+  const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  const date = now.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+
   return (
     <div className="panel">
-      <div className="current-section">
-        <div className="label">ATENDENDO</div>
+      <header className="panel-header">
+        <div className="brand">
+          {LOGO_URL && !logoFailed && (
+            <img className="brand-logo" src={LOGO_URL} alt="" onError={() => setLogoFailed(true)} />
+          )}
+          <span className="brand-name">{PLACE_NAME}</span>
+        </div>
+        <div className="clock">
+          <span className="clock-time">{time}</span>
+          <span className="clock-date">{date}</span>
+        </div>
+      </header>
+
+      <main className={`current-section${isHighlighted ? ' is-calling' : ''}`}>
         <div className="audio-control">
-          <button type="button" onClick={enableAudio}>
+          <button type="button" onClick={enableAudio} className={audioEnabled ? 'is-on' : ''}>
             {audioEnabled ? 'Som e voz ativados' : 'Ativar som e voz'}
           </button>
           {audioMessage && <span role="status">{audioMessage}</span>}
         </div>
-        <div className="current-ticket">
-          {currentTicket ? (
-            <>
-              <div className="ticket-number">{currentTicket.number}</div>
-              <div className="ticket-service">{currentTicket.serviceType}</div>
-              <div className="counter">Guichê {COUNTER_NUMBER}</div>
-            </>
+        {currentTicket ? (
+          <div key={callKey} className="current-ticket">
+            <div className="label">Senha</div>
+            <div className="ticket-number">{currentTicket.number}</div>
+            {currentTicket.serviceType && <div className="ticket-service">{currentTicket.serviceType}</div>}
+            <div className="counter">
+              Guichê <strong>{COUNTER_NUMBER}</strong>
+            </div>
+          </div>
+        ) : (
+          <div className="current-ticket">
+            <div className="empty">Aguardando chamada…</div>
+          </div>
+        )}
+      </main>
+
+      <aside className="history-section">
+        <div className="label">Últimas chamadas</div>
+        <ol className="history">
+          {recentTickets.length === 0 && <li className="history-empty">Nenhuma chamada ainda</li>}
+          {recentTickets.map((ticket, index) => (
+            <li key={`${ticket._id}-${index}`} className="history-item">
+              <span className="number">{ticket.number}</span>
+              <span className="counter">Guichê {COUNTER_NUMBER}</span>
+            </li>
+          ))}
+        </ol>
+      </aside>
+
+      <footer className="next-section">
+        <div className="label">Próximas</div>
+        <div className="next-tickets">
+          {nextTickets.length === 0 ? (
+            <span className="next-empty">Sem senhas na fila</span>
           ) : (
-            <div className="empty">Aguardando...</div>
+            nextTickets.map((ticket) => (
+              <span key={ticket._id} className="next-item">
+                {ticket.number}
+              </span>
+            ))
           )}
         </div>
-      </div>
-
-      <div className="next-section">
-        <div className="label">PRÓXIMAS SENHAS</div>
-        <div className="next-tickets">
-          {nextTickets.map((ticket, index) => (
-            <div key={ticket._id} className="next-item">
-              <span className="position">{index + 1}º</span>
-              <span className="number">{ticket.number}</span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div className="history-section">
-        <div className="label">CHAMADAS RECENTES</div>
-        <div className="history">
-          {calledTickets.map((ticket, index) => (
-            <div key={`${ticket._id}-${index}`} className="history-item">
-              {ticket.number}
-            </div>
-          ))}
-        </div>
-      </div>
+      </footer>
     </div>
   );
 }

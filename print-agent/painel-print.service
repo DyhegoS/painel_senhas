@@ -1,0 +1,16 @@
+[Unit]
+Description=Painel de Senhas - Agente de impressao
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=pi
+WorkingDirectory=/home/pi/print-agent
+Environment=BACKEND_URL=http://192.168.50.8:5000
+Environment=PRINTER_DEVICE=/dev/usb/lp0
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,14 @@
+{
+  "name": "painel-senhas-print-agent",
+  "version": "1.0.0",
+  "description": "Agente de impressão de senhas para o Raspberry Pi do totem",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "test-print": "node src/index.js --test"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "socket.io-client": "^4.7.2"
+  }
+}

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://192.168.15.5:5000';
+const SOCKET_URL = 'http://192.168.50.8:5000';
 
 export default function TicketScreen({ route, navigation }) {
   const { ticket } = route.params;
@@ -64,6 +64,15 @@ export default function TicketScreen({ route, navigation }) {
         {status === 'waiting' && <Text style={styles.position}>Posição na fila: {position}</Text>}
       </View>
 
+      {ticket.printStatus === 'printed' && (
+        <Text style={styles.printMessage}>Retire seu papel na impressora abaixo</Text>
+      )}
+      {(ticket.printStatus === 'error' || ticket.printStatus === 'no_printer') && (
+        <Text style={styles.printMessage}>
+          Não foi possível imprimir. Anote sua senha ou procure a recepção.
+        </Text>
+      )}
+
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
         <Text style={styles.backButtonText}>Voltar</Text>
       </TouchableOpacity>
@@ -107,6 +116,13 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
     marginTop: 10,
+  },
+  printMessage: {
+    fontSize: 18,
+    color: '#fff',
+    textAlign: 'center',
+    fontWeight: '600',
+    marginBottom: 30,
   },
   backButton: {
     backgroundColor: '#fff',
