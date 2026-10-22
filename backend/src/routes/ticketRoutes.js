@@ -1,6 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const ticketController = require('../controllers/ticketController');
+const { requireAuth, requireRole } = require('../middleware/auth');
+
+// Apenas atendentes, médicos e administradores podem chamar e encerrar senhas
+const staffOnly = [requireAuth, requireRole('attendant', 'doctor', 'admin')];
 
 const PRINT_TIMEOUT_MS = 8000;
 
@@ -43,10 +47,9 @@ router.get('/queue', async (req, res) => {
 });
 
 // Chamar próxima senha
-router.post('/call', async (req, res) => {
+router.post('/call', staffOnly, async (req, res) => {
   try {
-    const { attendantId } = req.body;
-    const ticket = await ticketController.callNextTicket(attendantId);
+    const ticket = await ticketController.callNextTicket(req.user);
     if (!ticket) {
       return res.status(200).json({ ticket: null, message: 'Nenhuma senha na fila' });
     }
@@ -57,7 +60,7 @@ router.post('/call', async (req, res) => {
 });
 
 // Finalizar atendimento
-router.post('/:id/finish', async (req, res) => {
+router.post('/:id/finish', staffOnly, async (req, res) => {
   try {
     const ticket = await ticketController.finishTicket(req.params.id);
     res.json(ticket);
@@ -67,7 +70,7 @@ router.post('/:id/finish', async (req, res) => {
 });
 
 // Cancelar senha
-router.post('/:id/cancel', async (req, res) => {
+router.post('/:id/cancel', staffOnly, async (req, res) => {
   try {
     const ticket = await ticketController.cancelTicket(req.params.id);
     res.json(ticket);

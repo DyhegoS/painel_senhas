@@ -167,3 +167,28 @@ socket.on('ticket_finished', (ticket) => {
   // ticket já foi finalizado
 });
 ```
+
+## Autenticação e usuários
+
+Atendentes, médicos e administradores fazem login no app `web-attendant`.
+No primeiro start do backend, se não existir nenhum administrador, é criado um
+com `ADMIN_USERNAME` / `ADMIN_PASSWORD` do `.env` (padrão: `admin` / `admin123` — troque depois).
+
+Rotas protegidas exigem o cabeçalho `Authorization: Bearer <token>`.
+
+| Método | Rota                      | Acesso                   | Descrição                                    |
+| ------ | ------------------------- | ------------------------ | -------------------------------------------- |
+| POST   | `/api/auth/login`         | público                  | `{ username, password }` → `{ token, user }` |
+| GET    | `/api/auth/me`            | logado                   | Usuário da sessão                            |
+| GET    | `/api/users`              | admin                    | Lista usuários                               |
+| POST   | `/api/users`              | admin                    | Cria usuário                                 |
+| PUT    | `/api/users/:id`          | admin                    | Atualiza (senha opcional)                    |
+| DELETE | `/api/users/:id`          | admin                    | Remove usuário                               |
+| POST   | `/api/tickets/call`       | atendente, médico, admin | Chama a próxima senha para o usuário logado  |
+| POST   | `/api/tickets/:id/finish` | atendente, médico, admin | Finaliza atendimento                         |
+| POST   | `/api/tickets/:id/cancel` | atendente, médico, admin | Cancela senha                                |
+
+Campos do usuário: `name`, `username`, `password` (mín. 6 caracteres), `role`
+(`admin` | `attendant` | `doctor`), `locationType` (`Guichê` | `Consultório` | `Sala`),
+`locationNumber` (até 3 dígitos) e `active`. O local é enviado junto com a senha chamada e
+exibido/anunciado no painel da TV.

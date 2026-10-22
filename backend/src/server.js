@@ -8,6 +8,9 @@ require('dotenv').config();
 // Imports de rotas
 const ticketRoutes = require('./routes/ticketRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
+const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const { ensureAdmin } = require('./controllers/userController');
 
 const app = express();
 const server = http.createServer(app);
@@ -23,7 +26,10 @@ app.use(express.json());
 // Conectar MongoDB
 mongoose
   .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/painel_senhas')
-  .then(() => console.log('✓ MongoDB conectado'))
+  .then(() => {
+    console.log('✓ MongoDB conectado');
+    return ensureAdmin();
+  })
   .catch((err) => console.error('✗ Erro ao conectar MongoDB:', err));
 
 // Health check
@@ -34,6 +40,8 @@ app.get('/api/health', (req, res) => {
 // Rotas da API
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/services', serviceRoutes);
+app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
 
 // WebSocket para atualizações em tempo real
 const connectedClients = {

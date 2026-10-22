@@ -74,8 +74,9 @@ async function getQueue() {
   }
 }
 
-// Chamar próxima senha
-async function callNextTicket(attendantId) {
+// Chamar próxima senha (attendant pode ser o usuário logado ou apenas um identificador)
+async function callNextTicket(attendant) {
+  const attendantId = attendant && attendant._id ? String(attendant._id) : attendant;
   try {
     const nextTicket = await Ticket.findOne({ status: 'waiting' })
       .populate('serviceType')
@@ -96,6 +97,9 @@ async function callNextTicket(attendantId) {
       serviceType: nextTicket.serviceType.name,
       status: nextTicket.status,
       attendant: attendantId,
+      attendantName: attendant && attendant.name,
+      locationType: attendant && attendant.locationType,
+      locationNumber: attendant && attendant.locationNumber,
     };
   } catch (error) {
     throw error;

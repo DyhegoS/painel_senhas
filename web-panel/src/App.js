@@ -9,6 +9,12 @@ const PLACE_NAME = process.env.REACT_APP_PLACE_NAME || 'Sala de Espera';
 const LOGO_URL = process.env.REACT_APP_LOGO_URL || '';
 const HIGHLIGHT_DURATION_MS = 8000;
 
+// Local informado pelo usuário que chamou a senha (padrão: Guichê do painel)
+const locationOf = (ticket) => ({
+  type: ticket.locationType || 'Guichê',
+  number: ticket.locationNumber || COUNTER_NUMBER,
+});
+
 function App() {
   const [calledTickets, setCalledTickets] = useState([]);
   const [currentTicket, setCurrentTicket] = useState(null);
@@ -70,7 +76,9 @@ function App() {
         .map((letter) => `${AUDIO_BASE}/letras/${letter.toLowerCase()}.mp3`),
       ...(digits || '').split('').map((digit) => `${AUDIO_BASE}/numeros/${digit}.mp3`),
       `${AUDIO_BASE}/dirigir%20se.mp3`,
-      `${AUDIO_BASE}/numeros/${COUNTER_NUMBER}.mp3`,
+      ...locationOf(ticket)
+        .number.split('')
+        .map((digit) => `${AUDIO_BASE}/numeros/${digit}.mp3`),
     ];
     const player = audioPlayerRef.current || new Audio();
     audioPlayerRef.current = player;
@@ -93,7 +101,9 @@ function App() {
       player.onerror = () => {
         player.onended = null;
         console.error('Erro ao carregar o áudio da chamada:', path);
-        setAudioMessage(`Não foi possível carregar o áudio ${decodeURIComponent(path.split('/').pop())}.`);
+        setAudioMessage(
+          `Não foi possível carregar o áudio ${decodeURIComponent(path.split('/').pop())}.`
+        );
       };
       player.play().catch((error) => {
         player.onended = null;
@@ -126,7 +136,10 @@ function App() {
       setCallKey((key) => key + 1);
       setIsHighlighted(true);
       window.clearTimeout(highlightTimerRef.current);
-      highlightTimerRef.current = window.setTimeout(() => setIsHighlighted(false), HIGHLIGHT_DURATION_MS);
+      highlightTimerRef.current = window.setTimeout(
+        () => setIsHighlighted(false),
+        HIGHLIGHT_DURATION_MS
+      );
       if (audioEnabledRef.current) {
         playBeep();
         window.clearTimeout(announcementTimerRef.current);
@@ -192,9 +205,11 @@ function App() {
           <div key={callKey} className="current-ticket">
             <div className="label">Senha</div>
             <div className="ticket-number">{currentTicket.number}</div>
-            {currentTicket.serviceType && <div className="ticket-service">{currentTicket.serviceType}</div>}
+            {currentTicket.serviceType && (
+              <div className="ticket-service">{currentTicket.serviceType}</div>
+            )}
             <div className="counter">
-              Guichê <strong>{COUNTER_NUMBER}</strong>
+              {locationOf(currentTicket).type} <strong>{locationOf(currentTicket).number}</strong>
             </div>
           </div>
         ) : (
@@ -211,7 +226,9 @@ function App() {
           {recentTickets.map((ticket, index) => (
             <li key={`${ticket._id}-${index}`} className="history-item">
               <span className="number">{ticket.number}</span>
-              <span className="counter">Guichê {COUNTER_NUMBER}</span>
+              <span className="counter">
+                {locationOf(ticket).type} {locationOf(ticket).number}
+              </span>
             </li>
           ))}
         </ol>

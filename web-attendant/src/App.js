@@ -1,123 +1,113 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
-import { io } from 'socket.io-client';
+import { api, getToken, setToken, ROLE_LABELS, formatLocation } from './api';
+import Login from './components/Login';
+import AttendantPanel from './components/AttendantPanel';
+import UserAdmin from './components/UserAdmin';
+import TeamList from './components/TeamList';
 import './App.css';
 
-const API_URL = 'http://192.168.50.8:5000/api';
-const SOCKET_URL = 'http://192.168.50.8:5000';
-
 function App() {
-  const [queue, setQueue] = useState([]);
-  const [currentTicket, setCurrentTicket] = useState(null);
-  const [socket, setSocket] = useState(null);
-  const [infoMessage, setInfoMessage] = useState('');
+  const [user, setUser] = useState(null);
+  const [checkingSession, setCheckingSession] = useState(Boolean(getToken()));
+  const [view, setView] = useState('attendance');
 
+  // Restaurar sessão salva
   useEffect(() => {
-    const newSocket = io(SOCKET_URL);
-    setSocket(newSocket);
-
-    newSocket.on('queue_update', (data) => {
-      setQueue(data);
-    });
-
-    fetchQueue();
-
-    return () => newSocket.disconnect();
+    if (!getToken()) return;
+    api
+      .get('/auth/me')
+      .then((response) => {
+        setUser(response.data);
+        setView(response.data.role === 'admin' ? 'users' : 'attendance');
+      })
+      .catch(() => setToken(null))
+      .finally(() => setCheckingSession(false));
   }, []);
 
-  const fetchQueue = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/tickets/queue`);
-      setQueue(response.data);
-    } catch (error) {
-      console.error('Erro ao buscar fila:', error);
-    }
-  };
-
-  const callNextTicket = async () => {
-    try {
-      const response = await axios.post(`${API_URL}/tickets/call`, {
-        attendantId: 'attendant_001',
-      });
-
-      const ticket = response.data.ticket === undefined ? response.data : response.data.ticket;
-      if (!ticket) {
-        setInfoMessage(response.data.message || 'Nenhuma senha na fila');
-        return;
+  // Encerrar a sessão quando o token expirar
+  useEffect(() => {
+    const interceptor = api.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (
+          error.response &&
+          error.response.status === 401 &&
+          !error.config.url.includes('/auth/login')
+        ) {
+          setToken(null);
+          setUser(null);
+        }
+        return Promise.reject(error);
       }
+    );
+    return () => api.interceptors.response.eject(interceptor);
+  }, []);
 
-      setCurrentTicket(ticket);
-      socket.emit('ticket_called', ticket);
-      setInfoMessage('');
-      fetchQueue();
-    } catch (error) {
-      if (error.response && error.response.data) {
-        setInfoMessage(
-          error.response.data.error || error.response.data.message || 'Erro ao chamar próxima senha'
-        );
-      } else {
-        setInfoMessage('Erro ao chamar próxima senha');
-      }
-      console.error('Erro ao chamar próxima senha:', error);
-    }
+  const handleLogin = (token, loggedUser) => {
+    if (token) setToken(token);
+    setUser(loggedUser);
+    setView(loggedUser.role === 'admin' ? 'users' : 'attendance');
   };
 
-  const finishTicket = async () => {
-    try {
-      await axios.post(`${API_URL}/tickets/${currentTicket._id}/finish`);
-      setCurrentTicket(null);
-      socket.emit('ticket_finished', currentTicket);
-      fetchQueue();
-    } catch (error) {
-      console.error('Erro ao finalizar atendimento:', error);
-    }
+  const logout = () => {
+    setToken(null);
+    setUser(null);
   };
+
+  if (checkingSession) {
+    return <div className="loading">Carregando…</div>;
+  }
+
+  if (!user) {
+    return <Login onLogin={handleLogin} />;
+  }
+
+  const location = formatLocation(user);
 
   return (
     <div className="container">
       <header className="header">
         <h1>🎫 Painel de Atendimento</h1>
+        <div className="header-user">
+          <span>
+            {user.name} · {ROLE_LABELS[user.role]}
+            {location && ` · ${location}`}
+          </span>
+          <button onClick={logout} className="btn btn-link">
+            Sair
+          </button>
+        </div>
+        <nav className="tabs">
+          <button
+            className={view === 'attendance' ? 'tab is-active' : 'tab'}
+            onClick={() => setView('attendance')}
+          >
+            Atendimento
+          </button>
+          <button
+            className={view === 'team' ? 'tab is-active' : 'tab'}
+            onClick={() => setView('team')}
+          >
+            Equipe
+          </button>
+          {user.role === 'admin' && (
+            <button
+              className={view === 'users' ? 'tab is-active' : 'tab'}
+              onClick={() => setView('users')}
+            >
+              Usuários
+            </button>
+          )}
+        </nav>
       </header>
 
-      <div className="main-content">
-        <div className="current-ticket">
-          <h2>Atendimento Atual</h2>
-          {infoMessage && !currentTicket && <div className="info-message">{infoMessage}</div>}
-          {currentTicket ? (
-            <div className="ticket-display">
-              <div className="ticket-number">{currentTicket.number}</div>
-              <p className="ticket-service">{currentTicket.serviceType}</p>
-              <button onClick={finishTicket} className="btn btn-success">
-                ✓ Finalizar Atendimento
-              </button>
-            </div>
-          ) : (
-            <div className="no-ticket">
-              <p>Nenhuma senha sendo atendida</p>
-              <button onClick={callNextTicket} className="btn btn-primary btn-large">
-                Chamar Próximo
-              </button>
-            </div>
-          )}
-        </div>
-
-        <div className="queue-section">
-          <h2>Fila de Espera</h2>
-          <div className="queue-list">
-            {queue.length === 0 ? (
-              <p className="empty-message">Nenhuma senha na fila</p>
-            ) : (
-              queue.map((ticket, index) => (
-                <div key={ticket._id} className="queue-item">
-                  <span className="position">{index + 1}º</span>
-                  <span className="ticket">{ticket.number}</span>
-                  <span className="service">{ticket.serviceType}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
-      </div>
+      {view === 'users' && user.role === 'admin' ? (
+        <UserAdmin currentUser={user} onCurrentUserChange={setUser} />
+      ) : view === 'team' ? (
+        <TeamList currentUser={user} />
+      ) : (
+        <AttendantPanel />
+      )}
     </div>
   );
 }

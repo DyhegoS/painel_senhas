@@ -21,34 +21,52 @@ async function seedDatabase() {
     const services = await ServiceType.insertMany([
       {
         name: 'Exame',
-        prefix: 'A',
-        description: 'Coleta de sangue e exames',
+        prefix: 'E',
+        description: 'Atendimento a exames',
+        active: true,
+      },
+      {
+        name: 'Agendar Exames',
+        prefix: 'AE',
+        description: 'Agendamento de Exames',
         active: true,
       },
       {
         name: 'Consulta',
-        prefix: 'B',
-        description: 'Consulta médica geral',
-        active: true,
-      },
-      {
-        name: 'Vacinação',
         prefix: 'C',
-        description: 'Aplicação de vacinas',
+        description: 'Atendimento de consultas',
         active: true,
       },
       {
-        name: 'Curativos',
-        prefix: 'D',
-        description: 'Curativos e feridas',
+        name: 'Agendar Consultas',
+        prefix: 'AC',
+        description: 'Agendamento de consultas',
         active: true,
       },
       {
-        name: 'Recepção',
-        prefix: 'E',
-        description: 'Atendimento de recepção',
+        name: 'Consulta (80+)',
+        prefix: 'CP',
+        description: 'Consultas preferencial 80+',
         active: true,
       },
+      {
+        name: 'Exame (80+)',
+        prefix: 'EP',
+        description: 'Exame preferencial 80+',
+        active: true,
+      },
+      {
+        name: 'Consulta Preferencial',
+        prefix: 'CS',
+        description: 'Agendamento de consultas preferencial',
+        active: true,
+      },
+      {
+        name: 'Exame Preferencial',
+        prefix: 'ES',
+        description: 'Exame preferencial',
+        active: true,
+      }
     ]);
 
     console.log(`✓ ${services.length} tipos de serviço criados`);
