@@ -17,6 +17,8 @@ const serviceTypeSchema = new mongoose.Schema({
     type: Boolean,
     default: true,
   },
+  // Senhas criadas antes desta data não contam para a numeração
+  counterResetAt: Date,
   createdAt: {
     type: Date,
     default: Date.now,

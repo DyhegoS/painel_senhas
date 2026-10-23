@@ -35,6 +35,17 @@ async function requireAuth(req, res, next) {
   }
 }
 
+// Usuário ativo dono do token, ou null se o token for inválido
+async function userFromToken(token) {
+  try {
+    const payload = jwt.verify(token, JWT_SECRET);
+    const user = await User.findById(payload.sub);
+    return user && user.active ? user : null;
+  } catch (error) {
+    return null;
+  }
+}
+
 function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
@@ -44,4 +55,4 @@ function requireRole(...roles) {
   };
 }
 
-module.exports = { signToken, requireAuth, requireRole };
+module.exports = { signToken, userFromToken, requireAuth, requireRole };

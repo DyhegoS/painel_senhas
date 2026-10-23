@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://192.168.50.8:5000';
+import { SOCKET_URL } from '../config';
 
 export default function TicketScreen({ route, navigation }) {
   const { ticket } = route.params;
@@ -14,6 +14,7 @@ export default function TicketScreen({ route, navigation }) {
 
     socket.on('connect', () => {
       console.log('Conectado ao servidor');
+      socket.emit('identify', { type: 'customer' });
     });
 
     socket.on('ticket_status_update', (data) => {

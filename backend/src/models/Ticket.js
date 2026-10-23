@@ -1,10 +1,11 @@
 const mongoose = require('mongoose');
 
 const ticketSchema = new mongoose.Schema({
+  // Não é único: a numeração pode ser reiniciada ao zerar as filas
   number: {
     type: String,
     required: true,
-    unique: true,
+    index: true,
   },
   serviceType: {
     type: mongoose.Schema.Types.ObjectId,
@@ -13,7 +14,7 @@ const ticketSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['waiting', 'called', 'attended', 'cancelled'],
+    enum: ['waiting', 'called', 'attended', 'absent', 'cancelled'],
     default: 'waiting',
   },
   calledAt: Date,

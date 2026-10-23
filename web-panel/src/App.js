@@ -68,6 +68,7 @@ function App() {
 
   const playTicketAudio = useCallback((ticket) => {
     const [prefix, digits] = String(ticket.number).split('-');
+    const location = locationOf(ticket);
     const audioPaths = [
       `${AUDIO_BASE}/senha.mp3`,
       ...prefix
@@ -75,9 +76,11 @@ function App() {
         .split('')
         .map((letter) => `${AUDIO_BASE}/letras/${letter.toLowerCase()}.mp3`),
       ...(digits || '').split('').map((digit) => `${AUDIO_BASE}/numeros/${digit}.mp3`),
-      `${AUDIO_BASE}/dirigir%20se.mp3`,
-      ...locationOf(ticket)
-        .number.split('')
+      location.type === 'Consultório'
+        ? `${AUDIO_BASE}/consultorio.mp3`
+        : `${AUDIO_BASE}/dirigir%20se.mp3`,
+      ...String(location.number)
+        .split('')
         .map((digit) => `${AUDIO_BASE}/numeros/${digit}.mp3`),
     ];
     const player = audioPlayerRef.current || new Audio();
@@ -129,6 +132,7 @@ function App() {
 
   useEffect(() => {
     const socket = io(SOCKET_URL);
+    socket.on('connect', () => socket.emit('identify', { type: 'panel' }));
 
     socket.on('ticket_called', (ticket) => {
       setCurrentTicket(ticket);

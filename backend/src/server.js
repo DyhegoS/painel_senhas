@@ -10,7 +10,10 @@ const ticketRoutes = require('./routes/ticketRoutes');
 const serviceRoutes = require('./routes/serviceRoutes');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 const { ensureAdmin } = require('./controllers/userController');
+const { userFromToken } = require('./middleware/auth');
+const Ticket = require('./models/Ticket');
 
 const app = express();
 const server = http.createServer(app);
@@ -18,6 +21,7 @@ const io = socketIO(server, {
   cors: { origin: '*' },
 });
 app.set('io', io);
+app.set('startedAt', new Date());
 
 // Middlewares
 app.use(cors());
@@ -28,7 +32,8 @@ mongoose
   .connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/painel_senhas')
   .then(() => {
     console.log('✓ MongoDB conectado');
-    return ensureAdmin();
+    // Remove o índice único antigo do número da senha (a numeração agora pode reiniciar)
+    return Promise.all([ensureAdmin(), Ticket.syncIndexes()]);
   })
   .catch((err) => console.error('✗ Erro ao conectar MongoDB:', err));
 
@@ -42,41 +47,39 @@ app.use('/api/tickets', ticketRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // WebSocket para atualizações em tempo real
-const connectedClients = {
-  attendants: [],
-  panels: [],
-  customers: [],
-  printers: [],
-};
+// Conexões ativas: socket.id -> { type, user, ip, connectedAt }
+const clients = new Map();
+app.set('clients', clients);
 
 io.on('connection', (socket) => {
   console.log('👤 Cliente conectado:', socket.id);
-
-  // Identificar tipo de cliente
-  socket.on('identify', (data) => {
-    const { type } = data;
-    if (type === 'attendant') {
-      connectedClients.attendants.push(socket.id);
-      console.log(`✓ Atendente conectado. Total: ${connectedClients.attendants.length}`);
-    } else if (type === 'panel') {
-      connectedClients.panels.push(socket.id);
-      console.log(`✓ Painel conectado. Total: ${connectedClients.panels.length}`);
-    } else if (type === 'customer') {
-      connectedClients.customers.push(socket.id);
-      console.log(`✓ Cliente conectado. Total: ${connectedClients.customers.length}`);
-    } else if (type === 'printer') {
-      connectedClients.printers.push(socket.id);
-      socket.join('printers');
-      console.log(`🖨️  Impressora conectada. Total: ${connectedClients.printers.length}`);
-    }
+  clients.set(socket.id, {
+    id: socket.id,
+    type: 'unknown',
+    user: null,
+    ip: socket.handshake.address,
+    connectedAt: new Date(),
   });
 
-  // Evento quando uma senha é chamada
-  socket.on('ticket_called', (ticket) => {
-    io.emit('ticket_called', ticket);
-    console.log('🔊 Senha chamada:', ticket.number);
+  // Identificar tipo de cliente (e o usuário, quando enviar o token de login)
+  socket.on('identify', async (data = {}) => {
+    const client = clients.get(socket.id);
+    if (!client) return;
+    client.type = data.type || 'unknown';
+    if (data.token) {
+      const user = await userFromToken(data.token);
+      if (user) client.user = user.toPublic();
+    }
+
+    if (client.type === 'printer') {
+      socket.join('printers');
+      console.log('🖨️  Impressora conectada');
+    } else {
+      console.log(`✓ ${client.type} identificado${client.user ? `: ${client.user.username}` : ''}`);
+    }
   });
 
   // Evento quando a fila é atualizada
@@ -93,10 +96,7 @@ io.on('connection', (socket) => {
   // Desconectar
   socket.on('disconnect', () => {
     console.log('👤 Cliente desconectado:', socket.id);
-    connectedClients.attendants = connectedClients.attendants.filter((id) => id !== socket.id);
-    connectedClients.panels = connectedClients.panels.filter((id) => id !== socket.id);
-    connectedClients.customers = connectedClients.customers.filter((id) => id !== socket.id);
-    connectedClients.printers = connectedClients.printers.filter((id) => id !== socket.id);
+    clients.delete(socket.id);
   });
 });
 

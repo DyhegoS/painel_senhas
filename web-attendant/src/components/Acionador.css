@@ -1,0 +1,235 @@
+/* Janela pequena do acionador de senhas */
+.acionador {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background: linear-gradient(#eef1f4, #d5dbe1);
+  color: #222;
+}
+
+.acionador-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 12px;
+  background: #0066cc;
+  color: #fff;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.acionador-user {
+  font-size: 12px;
+  font-weight: 400;
+  opacity: 0.9;
+}
+
+.acionador-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+}
+
+.acionador-tabs button {
+  padding: 10px;
+  border: none;
+  background: #2b2f33;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.acionador-tabs button.is-active {
+  background: #eef1f4;
+  color: #222;
+}
+
+.acionador-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+
+.acionador-center {
+  align-items: center;
+  text-align: center;
+}
+
+.acionador select,
+.acionador input {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid #999;
+  border-radius: 4px;
+  font-size: 15px;
+  background: #fff;
+}
+
+.acionador svg {
+  width: 26px;
+  height: 26px;
+  fill: currentColor;
+}
+
+.acionador-stats {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 16px;
+  color: #666;
+}
+
+.acionador-stats span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.acionador-stats output {
+  min-width: 34px;
+  padding: 4px 8px;
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  background: #fff;
+  color: #222;
+  font-weight: 700;
+  text-align: center;
+}
+
+.acionador-stats .acionador-timer {
+  background: #5b6670;
+  border-color: #4a535b;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+
+.acionador-call {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  align-self: center;
+  width: 110px;
+  padding: 14px 10px;
+  border: 1px solid #0b3d4f;
+  border-radius: 6px;
+  background: linear-gradient(#1d6b88, #0e4b62);
+  color: #cfe7f2;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
+}
+
+.acionador-call svg {
+  width: 64px;
+  height: 64px;
+}
+
+.acionador-call:hover:not(:disabled) {
+  background: linear-gradient(#237c9d, #115873);
+}
+
+.acionador-call:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.acionador .acionador-toggle {
+  align-self: center;
+  color: #0066cc;
+  font-size: 14px;
+}
+
+.acionador-number {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.acionador-number-row {
+  display: flex;
+  gap: 8px;
+}
+
+.acionador .btn {
+  padding: 8px 14px;
+  font-size: 14px;
+}
+
+.acionador .btn-primary {
+  background-color: #0066cc;
+  color: #fff;
+}
+
+.acionador .btn-success {
+  margin-top: 0;
+}
+
+.acionador-label {
+  color: #666;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.acionador-ticket {
+  color: #0066cc;
+  font-size: 48px;
+  font-weight: 800;
+}
+
+.acionador-service {
+  color: #444;
+  font-size: 16px;
+}
+
+.acionador-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 8px;
+}
+
+.acionador-actions .btn {
+  width: 100%;
+  padding: 10px;
+}
+
+.acionador-queues {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.acionador-queues th,
+.acionador-queues td {
+  padding: 6px 4px;
+  border-bottom: 1px solid #c2c9d0;
+  text-align: left;
+}
+
+.acionador-queues th svg {
+  width: 18px;
+  height: 18px;
+  color: #666;
+}
+
+.acionador-queues .num {
+  font-family: 'Courier New', monospace;
+  text-align: center;
+}
+
+.acionador-message {
+  color: #b02a37;
+  font-size: 13px;
+  text-align: center;
+}

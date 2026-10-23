@@ -46,3 +46,25 @@ export function formatLocation(user) {
   if (!user || !user.locationNumber) return '';
   return `${user.locationType} ${user.locationNumber}`;
 }
+
+// Duração em segundos no formato 1h 05min, 12min 30s ou 45s
+export function formatDuration(seconds) {
+  if (seconds === null || seconds === undefined) return '—';
+  const total = Math.round(seconds);
+  const h = Math.floor(total / 3600);
+  const m = Math.floor(total / 60) % 60;
+  const s = total % 60;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}min`;
+  if (m > 0) return `${m}min ${String(s).padStart(2, '0')}s`;
+  return `${s}s`;
+}
+
+export const CLIENT_TYPE_LABELS = {
+  attendant: 'Painel de atendimento',
+  acionador: 'Acionador de senhas',
+  panel: 'Painel de chamada (TV)',
+  totem: 'Totem',
+  customer: 'Tela da senha (totem)',
+  printer: 'Impressora',
+  unknown: 'Não identificado',
+};

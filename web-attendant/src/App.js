@@ -1,10 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { api, getToken, setToken, ROLE_LABELS, formatLocation } from './api';
+import { io } from 'socket.io-client';
+import { api, getToken, setToken, ROLE_LABELS, formatLocation, SOCKET_URL } from './api';
 import Login from './components/Login';
-import AttendantPanel from './components/AttendantPanel';
+import Welcome from './components/Welcome';
 import UserAdmin from './components/UserAdmin';
 import TeamList from './components/TeamList';
+import Reports from './components/Reports';
+import QueueReset from './components/QueueReset';
+import Connections from './components/Connections';
+import SystemStatus from './components/SystemStatus';
 import './App.css';
+
+// Abas do painel; as marcadas com admin só aparecem para o administrador
+const TABS = [
+  { id: 'attendance', label: 'Atendimento' },
+  { id: 'team', label: 'Equipe', admin: true },
+  { id: 'users', label: 'Usuários', admin: true },
+  { id: 'reports', label: 'Relatórios', admin: true },
+  { id: 'queues', label: 'Filas', admin: true },
+  { id: 'connections', label: 'Conectados', admin: true },
+  { id: 'status', label: 'Status', admin: true },
+];
 
 function App() {
   const [user, setUser] = useState(null);
@@ -49,6 +65,14 @@ function App() {
     setView(loggedUser.role === 'admin' ? 'users' : 'attendance');
   };
 
+  // Registra o usuário como conectado enquanto o painel estiver aberto
+  useEffect(() => {
+    if (!user) return undefined;
+    const socket = io(SOCKET_URL);
+    socket.on('connect', () => socket.emit('identify', { type: 'attendant', token: getToken() }));
+    return () => socket.disconnect();
+  }, [user]);
+
   const logout = () => {
     setToken(null);
     setUser(null);
@@ -63,6 +87,8 @@ function App() {
   }
 
   const location = formatLocation(user);
+  const tabs = TABS.filter((tab) => !tab.admin || user.role === 'admin');
+  const currentView = tabs.some((tab) => tab.id === view) ? view : 'attendance';
 
   return (
     <div className="container">
@@ -77,36 +103,35 @@ function App() {
             Sair
           </button>
         </div>
-        <nav className="tabs">
-          <button
-            className={view === 'attendance' ? 'tab is-active' : 'tab'}
-            onClick={() => setView('attendance')}
-          >
-            Atendimento
-          </button>
-          <button
-            className={view === 'team' ? 'tab is-active' : 'tab'}
-            onClick={() => setView('team')}
-          >
-            Equipe
-          </button>
-          {user.role === 'admin' && (
-            <button
-              className={view === 'users' ? 'tab is-active' : 'tab'}
-              onClick={() => setView('users')}
-            >
-              Usuários
-            </button>
-          )}
-        </nav>
+        {tabs.length > 1 && (
+          <nav className="tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                className={currentView === tab.id ? 'tab is-active' : 'tab'}
+                onClick={() => setView(tab.id)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </nav>
+        )}
       </header>
 
-      {view === 'users' && user.role === 'admin' ? (
+      {currentView === 'users' ? (
         <UserAdmin currentUser={user} onCurrentUserChange={setUser} />
-      ) : view === 'team' ? (
+      ) : currentView === 'team' ? (
         <TeamList currentUser={user} />
+      ) : currentView === 'reports' ? (
+        <Reports />
+      ) : currentView === 'queues' ? (
+        <QueueReset />
+      ) : currentView === 'connections' ? (
+        <Connections />
+      ) : currentView === 'status' ? (
+        <SystemStatus />
       ) : (
-        <AttendantPanel />
+        <Welcome user={user} />
       )}
     </div>
   );
