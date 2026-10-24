@@ -6,11 +6,12 @@ import {
   TouchableOpacity,
   Text,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 
-import { API_URL, SOCKET_URL } from '../config';
+import { API_URL, SOCKET_URL, TOTEM_HEADERS } from '../config';
 
 // Cor do botão conforme o tipo de atendimento
 const CARD_COLORS = {
@@ -20,6 +21,9 @@ const CARD_COLORS = {
 };
 
 function cardColor(service) {
+  if (service.priority === 2) return CARD_COLORS.idoso80;
+  if (service.priority === 1) return CARD_COLORS.preferencial;
+  if (service.priority === 0) return CARD_COLORS.normal;
   const name = service.name.toLowerCase();
   if (name.includes('80+')) return CARD_COLORS.idoso80;
   if (name.includes('preferencial')) return CARD_COLORS.preferencial;
@@ -29,6 +33,7 @@ function cardColor(service) {
 export default function HomeScreen({ navigation }) {
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     fetchServices();
@@ -52,14 +57,22 @@ export default function HomeScreen({ navigation }) {
     }
   };
 
+  // Bloqueia novos toques enquanto a senha é gerada (evita duas senhas num toque duplo)
   const generateTicket = async (serviceId) => {
+    if (generating) return;
+    setGenerating(true);
     try {
-      const response = await axios.post(`${API_URL}/tickets/generate`, {
-        serviceTypeId: serviceId,
-      });
+      const response = await axios.post(
+        `${API_URL}/tickets/generate`,
+        { serviceTypeId: serviceId },
+        { headers: TOTEM_HEADERS }
+      );
       navigation.navigate('Ticket', { ticket: response.data });
     } catch (error) {
       console.error('Erro ao gerar senha:', error);
+      Alert.alert('Não foi possível gerar a senha', 'Tente novamente ou procure a recepção.');
+    } finally {
+      setGenerating(false);
     }
   };
 
@@ -81,8 +94,9 @@ export default function HomeScreen({ navigation }) {
         {services.map((service) => (
           <TouchableOpacity
             key={service._id}
-            style={[styles.serviceCard, cardColor(service)]}
+            style={[styles.serviceCard, cardColor(service), generating && styles.disabled]}
             onPress={() => generateTicket(service._id)}
+            disabled={generating}
           >
             <Text style={styles.servicePrefix}>{service.prefix}</Text>
             <Text style={styles.serviceName} numberOfLines={1}>
@@ -154,5 +168,8 @@ const styles = StyleSheet.create({
   serviceDescription: {
     fontSize: 12,
     color: '#555',
+  },
+  disabled: {
+    opacity: 0.5,
   },
 });

@@ -13,7 +13,7 @@ function Login({ onLogin }) {
     setError('');
     try {
       const response = await api.post('/auth/login', { username, password });
-      onLogin(response.data.token, response.data.user);
+      onLogin(response.data.user);
     } catch (err) {
       setError(errorMessage(err, 'Não foi possível conectar ao servidor'));
       setSubmitting(false);

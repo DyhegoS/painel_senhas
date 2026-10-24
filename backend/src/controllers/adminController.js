@@ -2,23 +2,14 @@ const mongoose = require('mongoose');
 const ServiceType = require('../models/ServiceType');
 const Ticket = require('../models/Ticket');
 const User = require('../models/User');
-
-const DEFAULT_TIMEZONE = process.env.REPORT_TIMEZONE || 'America/Sao_Paulo';
-const PENDING_STATUSES = ['waiting', 'called'];
-
-function validTimezone(timezone) {
-  try {
-    Intl.DateTimeFormat('en-US', { timeZone: timezone });
-    return timezone;
-  } catch (error) {
-    return DEFAULT_TIMEZONE;
-  }
-}
+const { PENDING_STATUSES } = require('./ticketController');
+const { badRequest, notFound, assertId } = require('../errors');
+const { DEFAULT_TIMEZONE, validTimezone, startOfToday } = require('../time');
 
 function parseDate(value, name) {
   const date = new Date(value);
   if (!value || Number.isNaN(date.getTime())) {
-    throw new Error(`Data ${name} inválida`);
+    throw badRequest(`Data ${name} inválida`);
   }
   return date;
 }
@@ -41,7 +32,7 @@ async function getReport({ start, end, timezone }) {
   const from = parseDate(start, 'inicial');
   const to = parseDate(end, 'final');
   if (from > to) {
-    throw new Error('A data inicial deve ser anterior à data final');
+    throw badRequest('A data inicial deve ser anterior à data final');
   }
   const tz = validTimezone(timezone || DEFAULT_TIMEZONE);
   const match = { $match: { createdAt: { $gte: from, $lte: to } } };
@@ -152,14 +143,105 @@ async function getReport({ start, end, timezone }) {
   };
 }
 
+// Duração do atendimento (chamada → finalização) em segundos; null se não foi finalizada
+const serviceSeconds = {
+  $cond: [
+    { $and: [{ $eq: ['$status', 'attended'] }, '$calledAt', '$attendedAt'] },
+    { $divide: [{ $subtract: ['$attendedAt', '$calledAt'] }, 1000] },
+    null,
+  ],
+};
+
+const MAX_DETAIL_TICKETS = 1000;
+
+// Tempos de atendimento por atendente no período (pela data em que o atendimento aconteceu).
+// Com attendantId, inclui também a lista de atendimentos daquele atendente.
+async function getServiceTimes({ start, end, attendantId }) {
+  const from = parseDate(start, 'inicial');
+  const to = parseDate(end, 'final');
+  if (from > to) {
+    throw badRequest('A data inicial deve ser anterior à data final');
+  }
+
+  const match = {
+    attendant: attendantId ? String(attendantId) : { $ne: null },
+    $or: [
+      { status: 'attended', attendedAt: { $gte: from, $lte: to } },
+      { status: 'absent', calledAt: { $gte: from, $lte: to } },
+    ],
+  };
+
+  const byAttendant = await Ticket.aggregate([
+    { $match: match },
+    { $addFields: { serviceSeconds } },
+    {
+      $group: {
+        _id: '$attendant',
+        attended: countStatus('attended'),
+        absent: countStatus('absent'),
+        totalService: { $sum: '$serviceSeconds' },
+        avgService: { $avg: '$serviceSeconds' },
+        minService: { $min: '$serviceSeconds' },
+        maxService: { $max: '$serviceSeconds' },
+        firstCall: { $min: '$calledAt' },
+        lastFinish: { $max: '$attendedAt' },
+      },
+    },
+    { $sort: { totalService: -1 } },
+  ]);
+
+  const ids = byAttendant.map((a) => a._id).filter((id) => mongoose.isValidObjectId(id));
+  const users = await User.find({ _id: { $in: ids } });
+  const userById = new Map(users.map((u) => [String(u._id), u]));
+
+  const result = {
+    start: from,
+    end: to,
+    byAttendant: byAttendant.map((a) => {
+      const user = userById.get(String(a._id));
+      return {
+        ...a,
+        name: user ? user.name : a._id,
+        role: user ? user.role : null,
+        location: user && user.locationNumber ? `${user.locationType} ${user.locationNumber}` : '',
+      };
+    }),
+  };
+
+  if (attendantId) {
+    const tickets = await Ticket.find(match)
+      .populate('serviceType')
+      .sort({ calledAt: -1 })
+      .limit(MAX_DETAIL_TICKETS);
+    result.tickets = tickets.map((t) => ({
+      _id: t._id,
+      number: t.number,
+      serviceType: t.serviceType ? t.serviceType.name : 'Serviço removido',
+      status: t.status,
+      createdAt: t.createdAt,
+      calledAt: t.calledAt,
+      attendedAt: t.attendedAt,
+      waitSeconds: t.calledAt ? (t.calledAt - t.createdAt) / 1000 : null,
+      serviceSeconds:
+        t.status === 'attended' && t.calledAt && t.attendedAt
+          ? (t.attendedAt - t.calledAt) / 1000
+          : null,
+    }));
+    result.truncated = tickets.length === MAX_DETAIL_TICKETS;
+  }
+
+  return result;
+}
+
 // Cancela as senhas aguardando (e em chamada) e, se pedido, reinicia a numeração em 001
 async function resetQueues({ serviceTypeId, resetNumbering }) {
   const filter = { status: { $in: PENDING_STATUSES } };
   const serviceFilter = {};
   if (serviceTypeId) {
+    assertId(serviceTypeId, 'Tipo de serviço não encontrado');
     const service = await ServiceType.findById(serviceTypeId);
     if (!service) {
-      throw new Error('Tipo de serviço não encontrado');
+      throw notFound('Tipo de serviço não encontrado');
     }
     filter.serviceType = serviceTypeId;
     serviceFilter._id = serviceTypeId;
@@ -167,7 +249,7 @@ async function resetQueues({ serviceTypeId, resetNumbering }) {
 
   const result = await Ticket.updateMany(filter, { status: 'cancelled' });
   if (resetNumbering) {
-    await ServiceType.updateMany(serviceFilter, { counterResetAt: new Date() });
+    await ServiceType.updateMany(serviceFilter, { counter: 0, counterResetAt: new Date() });
   }
   return { cancelled: result.modifiedCount, resetNumbering: Boolean(resetNumbering) };
 }
@@ -197,8 +279,7 @@ async function getStatus({ clients, startedAt }) {
     connections[client.type in connections ? client.type : 'unknown'] += 1;
   });
 
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
+  const todayStart = startOfToday(DEFAULT_TIMEZONE);
   const [generatedToday, attendedToday, waiting, lastTicket] =
     dbState === 1
       ? await Promise.all([
@@ -228,6 +309,38 @@ async function getStatus({ clients, startedAt }) {
   };
 }
 
+// Senhas chamadas e ainda não finalizadas, com o atendente e há quanto tempo foram chamadas
+async function getInService() {
+  const tickets = await Ticket.find({ status: 'called' })
+    .populate('serviceType')
+    .sort({ calledAt: 1 });
+
+  const ids = [...new Set(tickets.map((t) => t.attendant))].filter((id) =>
+    mongoose.isValidObjectId(id)
+  );
+  const users = await User.find({ _id: { $in: ids } });
+  const userById = new Map(users.map((u) => [String(u._id), u]));
+
+  return tickets.map((t) => {
+    const user = userById.get(String(t.attendant));
+    return {
+      _id: t._id,
+      number: t.number,
+      serviceType: t.serviceType ? t.serviceType.name : 'Serviço removido',
+      calledAt: t.calledAt,
+      attendant: user
+        ? {
+            _id: user._id,
+            name: user.name,
+            role: user.role,
+            locationType: user.locationType,
+            locationNumber: user.locationNumber,
+          }
+        : { _id: t.attendant, name: t.attendant },
+    };
+  });
+}
+
 // Conexões em tempo real (socket) com o usuário identificado, quando houver
 function getConnections(clients) {
   return Array.from(clients.values())
@@ -241,4 +354,11 @@ function getConnections(clients) {
     .sort((a, b) => new Date(a.connectedAt) - new Date(b.connectedAt));
 }
 
-module.exports = { getReport, resetQueues, getStatus, getConnections };
+module.exports = {
+  getReport,
+  getServiceTimes,
+  getInService,
+  resetQueues,
+  getStatus,
+  getConnections,
+};

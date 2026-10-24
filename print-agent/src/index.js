@@ -5,10 +5,12 @@ const fs = require('fs');
 const { io } = require('socket.io-client');
 const { buildTicket } = require('./escpos');
 
-const BACKEND_URL = process.env.BACKEND_URL || 'http://192.168.50.8:5000';
+const BACKEND_URL = process.env.BACKEND_URL;
 const PRINTER_DEVICE = process.env.PRINTER_DEVICE || '/dev/usb/lp0';
 const PRINT_HEADER = process.env.PRINT_HEADER || 'PAINEL DE SENHAS';
 const PRINT_FOOTER = process.env.PRINT_FOOTER || 'Aguarde ser chamado no painel';
+// Deve ser igual ao PRINT_AGENT_TOKEN do .env do backend
+const PRINT_AGENT_TOKEN = process.env.PRINT_AGENT_TOKEN || '';
 
 async function printTicket(ticket) {
   const data = buildTicket(ticket, { header: PRINT_HEADER, footer: PRINT_FOOTER });
@@ -26,10 +28,15 @@ if (process.argv.includes('--test')) {
   return;
 }
 
+if (!BACKEND_URL) {
+  console.error('✗ Defina BACKEND_URL (ex.: http://192.168.0.10:5000) no painel-print.service');
+  process.exit(1);
+}
+
 const socket = io(BACKEND_URL, { reconnectionDelayMax: 10000 });
 
 socket.on('connect', () => {
-  socket.emit('identify', { type: 'printer' });
+  socket.emit('identify', { type: 'printer', printerToken: PRINT_AGENT_TOKEN });
   console.log(`✓ Conectado ao backend ${BACKEND_URL}`);
 });
 

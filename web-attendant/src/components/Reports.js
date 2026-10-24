@@ -1,11 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { api, errorMessage, formatDuration } from '../api';
-
-// Data local no formato AAAA-MM-DD (para os campos de data)
-function toInputDate(date) {
-  const offset = date.getTimezoneOffset() * 60000;
-  return new Date(date - offset).toISOString().slice(0, 10);
-}
+import { api, dayRangeParams, errorMessage, formatDuration, toInputDate } from '../api';
 
 const percent = (part, total) => (total ? `${Math.round((part / total) * 100)}%` : '—');
 
@@ -23,8 +17,7 @@ function Reports() {
     try {
       const response = await api.get('/admin/reports', {
         params: {
-          start: new Date(`${startDate}T00:00:00`).toISOString(),
-          end: new Date(`${endDate}T23:59:59.999`).toISOString(),
+          ...dayRangeParams(startDate, endDate),
           timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
       });

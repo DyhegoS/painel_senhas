@@ -484,6 +484,10 @@
   background-color: #6f42c1;
 }
 
+.team-avatar.role-supervisor {
+  background-color: #d97706;
+}
+
 .status-badge {
   flex: none;
   padding: 4px 10px;
@@ -660,6 +664,35 @@
 
 .report-table small {
   color: #888;
+}
+
+.report-table .elapsed-long {
+  color: #c0392b;
+  font-weight: 600;
+}
+
+.report-table tr.is-clickable {
+  cursor: pointer;
+}
+
+/* Título do card com botões ao lado (ex.: exportar) */
+.card-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.card-header h2 {
+  margin-bottom: 0;
+}
+
+.card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .reset-form {

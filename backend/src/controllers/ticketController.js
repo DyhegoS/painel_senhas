@@ -1,79 +1,118 @@
+const mongoose = require('mongoose');
 const ServiceType = require('../models/ServiceType');
 const Ticket = require('../models/Ticket');
-const { v4: uuidv4 } = require('uuid');
+const User = require('../models/User');
+const { badRequest, notFound, conflict, assertId } = require('../errors');
+const { startOfToday } = require('../time');
+
+const PENDING_STATUSES = ['waiting', 'called'];
+const SERVICE_NOT_FOUND = 'Tipo de serviço não encontrado';
+const TICKET_NOT_FOUND = 'Senha não encontrada';
+
+const formatNumber = (prefix, number) => `${prefix}-${String(number).padStart(3, '0')}`;
+const serviceName = (ticket) => (ticket.serviceType ? ticket.serviceType.name : 'Serviço removido');
+
+// Prioridade pelo nome, para serviços cadastrados antes do campo (80+ antes de preferencial)
+function inferPriority(name = '') {
+  const lower = name.toLowerCase();
+  if (lower.includes('80+')) return 2;
+  if (lower.includes('preferencial')) return 1;
+  return 0;
+}
+
+// Ajusta dados de versões anteriores: contador atômico e prioridade das filas
+async function initServices() {
+  const withoutCounter = await ServiceType.find({ counter: { $exists: false } });
+  await Promise.all(
+    withoutCounter.map(async (service) => {
+      // Parte do último número emitido desde o último reinício da numeração
+      const numbering = { serviceType: service._id };
+      if (service.counterResetAt) numbering.createdAt = { $gte: service.counterResetAt };
+      const lastTicket = await Ticket.findOne(numbering).sort({ createdAt: -1 });
+      const last = lastTicket ? parseInt(String(lastTicket.number).split('-')[1], 10) || 0 : 0;
+      await ServiceType.updateOne(
+        { _id: service._id, counter: { $exists: false } },
+        { $set: { counter: last } }
+      );
+    })
+  );
+
+  const withoutPriority = await ServiceType.find({ priority: { $exists: false } });
+  await Promise.all(
+    withoutPriority.map((service) =>
+      ServiceType.updateOne({ _id: service._id }, { priority: inferPriority(service.name) })
+    )
+  );
+
+  // Chamadas de hoje feitas antes do campo lastCalledAt (aparecem nas últimas chamadas do painel)
+  await Ticket.updateMany(
+    { lastCalledAt: { $exists: false }, calledAt: { $gte: startOfToday() } },
+    [{ $set: { lastCalledAt: '$calledAt' } }]
+  );
+
+  // Senhas pendentes geradas antes da prioridade herdam a do serviço
+  const services = await ServiceType.find().select('priority');
+  await Promise.all(
+    services.map((service) =>
+      Ticket.updateMany(
+        { serviceType: service._id, status: { $in: PENDING_STATUSES }, priority: { $exists: false } },
+        { priority: service.priority || 0 }
+      )
+    )
+  );
+}
 
 // Gerar próxima senha
 async function generateTicket(serviceTypeId) {
-  try {
-    const serviceType = await ServiceType.findById(serviceTypeId);
-    if (!serviceType) {
-      throw new Error('Tipo de serviço não encontrado');
-    }
+  assertId(serviceTypeId, SERVICE_NOT_FOUND);
 
-    // Buscar o maior número já gerado para este tipo de serviço desde o último reinício
-    const numbering = { serviceType: serviceTypeId };
-    if (serviceType.counterResetAt) numbering.createdAt = { $gte: serviceType.counterResetAt };
-    const lastTicket = await Ticket.findOne(numbering).sort({ number: -1 });
-
-    let number = 1;
-    if (lastTicket && lastTicket.number) {
-      const lastNumber = parseInt(lastTicket.number.split('-')[1]);
-      number = lastNumber + 1;
-    }
-
-    let ticketNumber = `${serviceType.prefix}-${String(number).padStart(3, '0')}`;
-
-    // Garantir que não crie número duplicado se houver algum número ausente ou conflito
-    while (await Ticket.exists({ ...numbering, number: ticketNumber })) {
-      number += 1;
-      ticketNumber = `${serviceType.prefix}-${String(number).padStart(3, '0')}`;
-    }
-
-    // Contar posição na fila
-    const position = await Ticket.countDocuments({
-      serviceType: serviceTypeId,
-      status: { $in: ['waiting', 'called'] },
-    });
-
-    const ticket = new Ticket({
-      number: ticketNumber,
-      serviceType: serviceTypeId,
-      position: position + 1,
-    });
-
-    await ticket.save();
-    await ticket.populate('serviceType');
-
-    return {
-      _id: ticket._id,
-      number: ticket.number,
-      serviceType: ticket.serviceType.name,
-      status: ticket.status,
-      position: ticket.position,
-      createdAt: ticket.createdAt,
-    };
-  } catch (error) {
-    throw error;
+  // O $inc é atômico: dois totens ao mesmo tempo nunca recebem o mesmo número
+  const serviceType = await ServiceType.findOneAndUpdate(
+    { _id: serviceTypeId, active: true },
+    { $inc: { counter: 1 } },
+    { new: true }
+  );
+  if (!serviceType) {
+    throw notFound(SERVICE_NOT_FOUND);
   }
+
+  // Posição na fila: quem ainda aguarda neste serviço, mais esta senha
+  const ahead = await Ticket.countDocuments({ serviceType: serviceTypeId, status: 'waiting' });
+
+  const ticket = await Ticket.create({
+    number: formatNumber(serviceType.prefix, serviceType.counter),
+    serviceType: serviceTypeId,
+    position: ahead + 1,
+    priority: serviceType.priority || 0,
+  });
+
+  return {
+    _id: ticket._id,
+    number: ticket.number,
+    serviceType: serviceType.name,
+    status: ticket.status,
+    position: ticket.position,
+    createdAt: ticket.createdAt,
+  };
 }
 
-// Obter fila de espera
-async function getQueue() {
-  try {
-    const tickets = await Ticket.find({ status: { $in: ['waiting', 'called'] } })
-      .populate('serviceType')
-      .sort({ position: 1 });
+// Ordem de chamada: prioridade da fila e, dentro dela, ordem de chegada
+const CALL_ORDER = { priority: -1, createdAt: 1 };
 
-    return tickets.map((t) => ({
-      _id: t._id,
-      number: t.number,
-      serviceType: t.serviceType.name,
-      status: t.status,
-      position: t.position,
-    }));
-  } catch (error) {
-    throw error;
-  }
+// Obter fila (aguardando e em chamada), na ordem em que serão chamadas
+async function getQueue() {
+  const tickets = await Ticket.find({ status: { $in: PENDING_STATUSES } })
+    .populate('serviceType')
+    .sort(CALL_ORDER);
+
+  return tickets.map((t) => ({
+    _id: t._id,
+    number: t.number,
+    serviceType: serviceName(t),
+    status: t.status,
+    position: t.position,
+    priority: t.priority || 0,
+  }));
 }
 
 // Dados enviados ao painel e ao atendente quando uma senha é chamada
@@ -81,7 +120,7 @@ function toCalledTicket(ticket, attendant) {
   return {
     _id: ticket._id,
     number: ticket.number,
-    serviceType: ticket.serviceType.name,
+    serviceType: serviceName(ticket),
     status: ticket.status,
     calledAt: ticket.calledAt,
     attendant: ticket.attendant,
@@ -96,58 +135,81 @@ function attendantIdOf(attendant) {
 }
 
 // Marca a senha como chamada de forma atômica, para dois atendentes não pegarem a mesma
-async function claimTicket(filter, attendant, sort = { createdAt: 1 }) {
+async function claimTicket(filter, attendant, sort = CALL_ORDER) {
+  const now = new Date();
   const ticket = await Ticket.findOneAndUpdate(
     filter,
-    { status: 'called', calledAt: new Date(), attendant: attendantIdOf(attendant) },
+    { status: 'called', calledAt: now, lastCalledAt: now, attendant: attendantIdOf(attendant) },
     { new: true, sort }
   ).populate('serviceType');
   return ticket ? toCalledTicket(ticket, attendant) : null;
 }
 
-// Chamar próxima senha, de qualquer serviço ou só do serviço informado
-// (attendant pode ser o usuário logado ou apenas um identificador)
+// Chamar próxima senha, de qualquer serviço (80+ e preferenciais primeiro) ou só do
+// serviço informado (attendant pode ser o usuário logado ou apenas um identificador)
 async function callNextTicket(attendant, serviceTypeId) {
   const filter = { status: 'waiting' };
-  if (serviceTypeId) filter.serviceType = serviceTypeId;
+  if (serviceTypeId) {
+    assertId(serviceTypeId, SERVICE_NOT_FOUND);
+    filter.serviceType = serviceTypeId;
+  }
   return claimTicket(filter, attendant);
 }
 
 // Chamar uma senha específica pelo número, sem as letras (ex.: 12 -> CS-012)
 async function callTicketByNumber(attendant, serviceTypeId, number) {
+  assertId(serviceTypeId, SERVICE_NOT_FOUND);
   const serviceType = await ServiceType.findById(serviceTypeId);
   if (!serviceType) {
-    throw new Error('Tipo de serviço não encontrado');
+    throw notFound(SERVICE_NOT_FOUND);
   }
   const digits = parseInt(number, 10);
   if (!Number.isInteger(digits) || digits <= 0) {
-    throw new Error('Número de senha inválido');
+    throw badRequest('Número de senha inválido');
   }
 
-  const ticketNumber = `${serviceType.prefix}-${String(digits).padStart(3, '0')}`;
+  const ticketNumber = formatNumber(serviceType.prefix, digits);
   // Se a numeração foi reiniciada pode haver números repetidos: vale a senha mais recente
   const ticket = await claimTicket(
-    { number: ticketNumber, status: { $in: ['waiting', 'absent'] } },
+    { serviceType: serviceTypeId, number: ticketNumber, status: { $in: ['waiting', 'absent'] } },
     attendant,
     { createdAt: -1 }
   );
   if (!ticket) {
-    throw new Error(`Senha ${ticketNumber} não encontrada ou já atendida`);
+    throw notFound(`Senha ${ticketNumber} não encontrada ou já atendida`);
   }
   return ticket;
 }
 
 // Chamar de novo a senha que o atendente já chamou
 async function recallTicket(ticketId, attendant) {
-  const ticket = await Ticket.findOne({
-    _id: ticketId,
-    status: 'called',
-    attendant: attendantIdOf(attendant),
-  }).populate('serviceType');
+  assertId(ticketId, TICKET_NOT_FOUND);
+  const ticket = await Ticket.findOneAndUpdate(
+    { _id: ticketId, status: 'called', attendant: attendantIdOf(attendant) },
+    { lastCalledAt: new Date() },
+    { new: true }
+  ).populate('serviceType');
   if (!ticket) {
-    throw new Error('Senha não está em atendimento');
+    throw conflict('Senha não está em atendimento');
   }
   return toCalledTicket(ticket, attendant);
+}
+
+// Últimas senhas chamadas hoje, da mais recente para a mais antiga, no mesmo formato do
+// evento ticket_called (para o painel da TV restaurar a tela ao abrir ou reconectar)
+async function getRecentCalls(limit = 6) {
+  const count = Math.min(Math.max(parseInt(limit, 10) || 6, 1), 20);
+  const tickets = await Ticket.find({ lastCalledAt: { $gte: startOfToday() } })
+    .populate('serviceType')
+    .sort({ lastCalledAt: -1 })
+    .limit(count);
+
+  const attendantIds = [...new Set(tickets.map((t) => t.attendant))].filter((id) =>
+    mongoose.isValidObjectId(id)
+  );
+  const users = await User.find({ _id: { $in: attendantIds } });
+  const userById = new Map(users.map((u) => [String(u._id), u]));
+  return tickets.map((t) => toCalledTicket(t, userById.get(String(t.attendant))));
 }
 
 // Senha em atendimento pelo atendente (para restaurar o acionador ao reabrir)
@@ -161,7 +223,7 @@ async function getCurrentTicket(attendant) {
 // Quantidade de senhas aguardando e a espera da mais antiga, por serviço
 async function getQueueSummary() {
   const [services, waiting] = await Promise.all([
-    ServiceType.find({ active: true }).sort({ name: 1 }),
+    ServiceType.find({ active: true }).sort({ priority: -1, name: 1 }),
     Ticket.aggregate([
       { $match: { status: 'waiting' } },
       {
@@ -181,67 +243,57 @@ async function getQueueSummary() {
       _id: s._id,
       name: s.name,
       prefix: s.prefix,
+      priority: s.priority || 0,
       waiting: stats ? stats.waiting : 0,
       oldestCreatedAt: stats ? stats.oldestCreatedAt : null,
     };
   });
 }
 
-// Finalizar atendimento
-async function finishTicket(ticketId) {
-  try {
-    const ticket = await Ticket.findById(ticketId);
-    if (!ticket) {
-      throw new Error('Senha não encontrada');
-    }
-
-    ticket.status = 'attended';
-    ticket.attendedAt = new Date();
-    await ticket.save();
-
-    return ticket;
-  } catch (error) {
-    throw error;
+// Muda o status só se a senha estiver num status permitido (e, para quem não é
+// administrador, só se tiver sido chamada pelo próprio usuário)
+async function transition(ticketId, user, fromStatuses, changes) {
+  assertId(ticketId, TICKET_NOT_FOUND);
+  const filter = { _id: ticketId, status: { $in: fromStatuses } };
+  if (user && typeof user === 'object' && user.role !== 'admin') {
+    filter.$or = [{ status: 'waiting' }, { attendant: attendantIdOf(user) }];
   }
+
+  const ticket = await Ticket.findOneAndUpdate(filter, changes, { new: true });
+  if (ticket) return ticket;
+
+  if (!(await Ticket.exists({ _id: ticketId }))) {
+    throw notFound(TICKET_NOT_FOUND);
+  }
+  throw conflict('Esta senha não está mais em atendimento por você');
+}
+
+// Finalizar atendimento
+function finishTicket(ticketId, user) {
+  return transition(ticketId, user, ['called'], { status: 'attended', attendedAt: new Date() });
 }
 
 // Paciente não compareceu à chamada
-async function markAbsent(ticketId) {
-  const ticket = await Ticket.findById(ticketId);
-  if (!ticket) {
-    throw new Error('Senha não encontrada');
-  }
-
-  ticket.status = 'absent';
-  await ticket.save();
-
-  return ticket;
+function markAbsent(ticketId, user) {
+  return transition(ticketId, user, ['called'], { status: 'absent' });
 }
 
 // Cancelar senha
-async function cancelTicket(ticketId) {
-  try {
-    const ticket = await Ticket.findById(ticketId);
-    if (!ticket) {
-      throw new Error('Senha não encontrada');
-    }
-
-    ticket.status = 'cancelled';
-    await ticket.save();
-
-    return ticket;
-  } catch (error) {
-    throw error;
-  }
+function cancelTicket(ticketId, user) {
+  return transition(ticketId, user, PENDING_STATUSES, { status: 'cancelled' });
 }
 
 module.exports = {
+  PENDING_STATUSES,
+  inferPriority,
+  initServices,
   generateTicket,
   getQueue,
   callNextTicket,
   callTicketByNumber,
   recallTicket,
   getCurrentTicket,
+  getRecentCalls,
   getQueueSummary,
   finishTicket,
   markAbsent,

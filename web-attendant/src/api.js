@@ -4,30 +4,29 @@ export const SOCKET_URL =
   process.env.REACT_APP_SOCKET_URL || `http://${window.location.hostname}:5000`;
 export const API_URL = process.env.REACT_APP_API_URL || `${SOCKET_URL}/api`;
 
-const TOKEN_KEY = 'painel_senhas_token';
+// A sessão fica num cookie httpOnly definido pelo backend (a página não tem acesso ao token).
+// No localStorage fica só um aviso, sem segredo, para as outras janelas (acionador)
+// perceberem login e logout.
+export const SESSION_KEY = 'painel_senhas_session';
+const LEGACY_TOKEN_KEY = 'painel_senhas_token';
 
-export const api = axios.create({ baseURL: API_URL });
+export const api = axios.create({ baseURL: API_URL, withCredentials: true });
 
-export function getToken() {
+export function markSession(active) {
   try {
-    return localStorage.getItem(TOKEN_KEY);
+    if (active) localStorage.setItem(SESSION_KEY, String(Date.now()));
+    else localStorage.removeItem(SESSION_KEY);
   } catch (error) {
-    return null;
+    // Sem armazenamento disponível: as outras janelas descobrem o logout no próximo erro 401
   }
 }
 
-export function setToken(token) {
-  try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-  } catch (error) {
-    // Sem armazenamento disponível: a sessão dura até recarregar a página
-  }
-  if (token) api.defaults.headers.common.Authorization = `Bearer ${token}`;
-  else delete api.defaults.headers.common.Authorization;
+// Versões anteriores guardavam o token aqui: remove para não deixá-lo exposto
+try {
+  localStorage.removeItem(LEGACY_TOKEN_KEY);
+} catch (error) {
+  // Sem armazenamento disponível
 }
-
-setToken(getToken());
 
 // Extrai a mensagem de erro enviada pela API
 export function errorMessage(error, fallback) {
@@ -36,6 +35,7 @@ export function errorMessage(error, fallback) {
 
 export const ROLE_LABELS = {
   admin: 'Administrador',
+  supervisor: 'Supervisor',
   attendant: 'Atendente',
   doctor: 'Médico',
 };
@@ -57,6 +57,20 @@ export function formatDuration(seconds) {
   if (h > 0) return `${h}h ${String(m).padStart(2, '0')}min`;
   if (m > 0) return `${m}min ${String(s).padStart(2, '0')}s`;
   return `${s}s`;
+}
+
+// Data local no formato AAAA-MM-DD (para os campos de data)
+export function toInputDate(date) {
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date - offset).toISOString().slice(0, 10);
+}
+
+// Período de dias inteiros (fuso deste computador) nos parâmetros que a API espera
+export function dayRangeParams(startDate, endDate) {
+  return {
+    start: new Date(`${startDate}T00:00:00`).toISOString(),
+    end: new Date(`${endDate}T23:59:59.999`).toISOString(),
+  };
 }
 
 export const CLIENT_TYPE_LABELS = {

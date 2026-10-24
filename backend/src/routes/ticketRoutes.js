@@ -1,12 +1,23 @@
 const express = require('express');
 const router = express.Router();
 const ticketController = require('../controllers/ticketController');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth, requireRole, requireTotem } = require('../middleware/auth');
+const { rateLimit } = require('../middleware/rateLimit');
+const { asyncHandler } = require('../errors');
 
 // Apenas atendentes, médicos e administradores podem chamar e encerrar senhas
 const staffOnly = [requireAuth, requireRole('attendant', 'doctor', 'admin')];
+// O supervisor acompanha as filas, mas não chama nem encerra senhas
+const canViewQueues = [requireAuth, requireRole('attendant', 'doctor', 'admin', 'supervisor')];
 
 const PRINT_TIMEOUT_MS = 8000;
+
+// Limite de senhas geradas por minuto por endereço (um totem não gera dezenas por minuto)
+const generateLimit = rateLimit({
+  windowMs: 60 * 1000,
+  max: Number(process.env.GENERATE_RATE_LIMIT) || 30,
+  message: 'Muitas senhas geradas em pouco tempo. Aguarde um instante.',
+});
 
 // Envia a senha para os agentes de impressão (Raspberry Pi) e aguarda a confirmação
 async function sendToPrinter(io, ticket) {
@@ -34,6 +45,13 @@ async function broadcastQueue(io) {
   }
 }
 
+// Avisa a tela da senha (totem/celular) que o status mudou e atualiza as filas
+function notifyStatus(req, ticket) {
+  const io = req.app.get('io');
+  if (io) io.emit('ticket_status_update', { ticketId: String(ticket._id), status: ticket.status });
+  broadcastQueue(io);
+}
+
 // Anuncia a senha no painel e atualiza as filas
 function announceCall(req, ticket) {
   const io = req.app.get('io');
@@ -41,53 +59,62 @@ function announceCall(req, ticket) {
     io.emit('ticket_called', ticket);
     console.log('🔊 Senha chamada:', ticket.number);
   }
-  broadcastQueue(io);
+  notifyStatus(req, ticket);
 }
 
 // Gerar nova senha
-router.post('/generate', async (req, res) => {
-  try {
-    const { serviceTypeId } = req.body;
+router.post(
+  '/generate',
+  requireTotem,
+  generateLimit,
+  asyncHandler(async (req, res) => {
+    const { serviceTypeId } = req.body || {};
     const ticket = await ticketController.generateTicket(serviceTypeId);
     broadcastQueue(req.app.get('io'));
     const printStatus = await sendToPrinter(req.app.get('io'), ticket);
     res.status(201).json({ ...ticket, printStatus });
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+  })
+);
 
 // Obter fila
-router.get('/queue', async (req, res) => {
-  try {
-    const queue = await ticketController.getQueue();
-    res.json(queue);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+router.get(
+  '/queue',
+  asyncHandler(async (req, res) => {
+    res.json(await ticketController.getQueue());
+  })
+);
+
+// Últimas chamadas do dia (público: usado pelo painel da TV ao abrir ou reconectar)
+router.get(
+  '/recent-calls',
+  asyncHandler(async (req, res) => {
+    res.json(await ticketController.getRecentCalls(req.query.limit));
+  })
+);
 
 // Resumo das filas: pacientes aguardando e tempo de espera por serviço
-router.get('/queue/summary', staffOnly, async (req, res) => {
-  try {
+router.get(
+  '/queue/summary',
+  canViewQueues,
+  asyncHandler(async (req, res) => {
     res.json(await ticketController.getQueueSummary());
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  })
+);
 
 // Senha em atendimento pelo usuário logado
-router.get('/current', staffOnly, async (req, res) => {
-  try {
+router.get(
+  '/current',
+  staffOnly,
+  asyncHandler(async (req, res) => {
     res.json({ ticket: await ticketController.getCurrentTicket(req.user) });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  })
+);
 
 // Chamar próxima senha (opcionalmente só de um serviço)
-router.post('/call', staffOnly, async (req, res) => {
-  try {
+router.post(
+  '/call',
+  staffOnly,
+  asyncHandler(async (req, res) => {
     const { serviceTypeId } = req.body || {};
     const ticket = await ticketController.callNextTicket(req.user, serviceTypeId);
     if (!ticket) {
@@ -95,65 +122,49 @@ router.post('/call', staffOnly, async (req, res) => {
     }
     announceCall(req, ticket);
     res.json(ticket);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+  })
+);
 
 // Chamar uma senha específica pelo número
-router.post('/call-number', staffOnly, async (req, res) => {
-  try {
+router.post(
+  '/call-number',
+  staffOnly,
+  asyncHandler(async (req, res) => {
     const { serviceTypeId, number } = req.body || {};
     const ticket = await ticketController.callTicketByNumber(req.user, serviceTypeId, number);
     announceCall(req, ticket);
     res.json(ticket);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+  })
+);
 
 // Rechamar a senha em atendimento
-router.post('/:id/recall', staffOnly, async (req, res) => {
-  try {
+router.post(
+  '/:id/recall',
+  staffOnly,
+  asyncHandler(async (req, res) => {
     const ticket = await ticketController.recallTicket(req.params.id, req.user);
     announceCall(req, ticket);
     res.json(ticket);
-  } catch (error) {
-    res.status(400).json({ error: error.message });
-  }
-});
+  })
+);
 
-// Finalizar atendimento
-router.post('/:id/finish', staffOnly, async (req, res) => {
-  try {
-    const ticket = await ticketController.finishTicket(req.params.id);
-    broadcastQueue(req.app.get('io'));
-    res.json(ticket);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
+// Finalizar atendimento, paciente ausente ou cancelar senha
+const CLOSE_ACTIONS = {
+  finish: ticketController.finishTicket,
+  absent: ticketController.markAbsent,
+  cancel: ticketController.cancelTicket,
+};
 
-// Paciente ausente
-router.post('/:id/absent', staffOnly, async (req, res) => {
-  try {
-    const ticket = await ticketController.markAbsent(req.params.id);
-    broadcastQueue(req.app.get('io'));
-    res.json(ticket);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Cancelar senha
-router.post('/:id/cancel', staffOnly, async (req, res) => {
-  try {
-    const ticket = await ticketController.cancelTicket(req.params.id);
-    broadcastQueue(req.app.get('io'));
-    res.json(ticket);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+Object.entries(CLOSE_ACTIONS).forEach(([action, close]) => {
+  router.post(
+    `/:id/${action}`,
+    staffOnly,
+    asyncHandler(async (req, res) => {
+      const ticket = await close(req.params.id, req.user);
+      notifyStatus(req, ticket);
+      res.json(ticket);
+    })
+  );
 });
 
 module.exports = router;

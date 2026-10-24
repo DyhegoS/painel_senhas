@@ -8,6 +8,7 @@ services:
       - '27017:27017'
     environment:
       MONGO_INITDB_DATABASE: painel_senhas
+    restart: unless-stopped
     volumes:
       - mongodb_data:/data/db
     networks:
@@ -20,16 +21,25 @@ services:
       - '5000:5000'
     depends_on:
       - mongodb
+    restart: unless-stopped
     environment:
       MONGODB_URI: mongodb://mongodb:27017/painel_senhas
       NODE_ENV: development
+      JWT_SECRET: ${JWT_SECRET:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      PRINT_AGENT_TOKEN: ${PRINT_AGENT_TOKEN:-}
+    # Em desenvolvimento: código montado do host e reinício automático com nodemon
+    command: sh -c "npm install && npx nodemon src/server.js"
     networks:
       - painel_network
     volumes:
       - ./backend:/app
+      # Mantém o node_modules do container (não sobrescreve com o do host)
+      - backend_node_modules:/app/node_modules
 
 volumes:
   mongodb_data:
+  backend_node_modules:
 
 networks:
   painel_network:

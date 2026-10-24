@@ -189,15 +189,67 @@ Serviços:
 ### Variáveis de Ambiente (.env)
 
 ```env
-# Backend
+# Backend (backend/.env — modelo completo em backend/.env.example)
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/painel_senhas
 NODE_ENV=development
-SOCKET_IO_PORT=5000
+JWT_SECRET=troque-por-uma-chave-secreta-longa   # obrigatório em produção
+ADMIN_PASSWORD=admin123                          # senha do admin criado no 1º start
+REPORT_TIMEZONE=America/Sao_Paulo
+CORS_ORIGIN=                 # origens liberadas, separadas por vírgula (vazio = todas)
+TOTEM_TOKEN=                 # se definido, o totem precisa enviar X-Totem-Token
+GENERATE_RATE_LIMIT=30       # senhas por minuto por IP
+PRINT_AGENT_TOKEN=           # segredo compartilhado com o print-agent
+COOKIE_SECURE=false          # true quando servido por HTTPS
+TRUST_PROXY=                 # nº de proxies reversos na frente (ex.: 1)
 
 # MongoDB Atlas (alternativa)
 # MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/painel_senhas
 ```
+
+```env
+# Totem (mobile/.env — modelo em mobile/.env.example)
+EXPO_PUBLIC_BACKEND_URL=http://<IP do servidor>:5000
+EXPO_PUBLIC_TOTEM_TOKEN=     # igual ao TOTEM_TOKEN do backend
+```
+
+## 📺 Painel da TV
+
+Vários painéis (em navegadores e computadores diferentes) ficam sincronizados: todos recebem
+as chamadas em tempo real e, ao abrir, recarregar ou voltar de uma queda de rede, cada painel
+busca no servidor a senha atual, as últimas chamadas e a fila. O relógio usa a hora do servidor.
+
+Variáveis opcionais do `web-panel` (arquivo `web-panel/.env`):
+
+```env
+REACT_APP_PLACE_NAME=Clínica Exemplo     # nome no topo do painel
+REACT_APP_LOGO_URL=/logo.png             # logotipo
+REACT_APP_TIMEZONE=America/Sao_Paulo     # fuso do relógio (padrão: o do computador)
+```
+
+### Som sempre ativo
+
+O painel não tem botão de som: ele toca sozinho a cada chamada. Mas **os navegadores bloqueiam
+áudio até alguém interagir com a página** — nenhum site consegue burlar isso. Se o som estiver
+bloqueado, o painel mostra um aviso e libera no primeiro toque, clique ou tecla (inclusive do
+controle remoto). Para nunca precisar disso, libere o autoplay no navegador da TV:
+
+**Chrome / Chromium (recomendado, em modo quiosque):**
+
+```bash
+# Linux / Raspberry Pi
+chromium-browser --kiosk --autoplay-policy=no-user-gesture-required http://<servidor>:<porta-do-painel>
+
+# Windows (atalho)
+"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk --autoplay-policy=no-user-gesture-required http://<servidor>:<porta-do-painel>
+```
+
+Feche todas as janelas do Chrome antes de abrir com esses parâmetros (senão ele reaproveita a
+janela já aberta e ignora a opção).
+
+**Firefox:** acesse o painel, clique no cadeado da barra de endereço → *Permissões* →
+*Reprodução automática* → **Permitir áudio e vídeo** (ou, em `about:config`,
+`media.autoplay.default = 0`).
 
 ## 🧪 Testando o Sistema
 
@@ -207,26 +259,37 @@ SOCKET_IO_PORT=5000
 # Listar tipos de atendimento
 curl http://localhost:5000/api/services
 
-# Gerar uma senha (primeiro obter ID de um serviço)
+# Gerar uma senha (use o _id de um serviço; inclua -H "X-Totem-Token: ..." se TOTEM_TOKEN estiver definido)
 curl -X POST http://localhost:5000/api/tickets/generate \
   -H "Content-Type: application/json" \
   -d '{"serviceTypeId":"ID_AQUI"}'
 
-# Chamar próxima senha
-curl -X POST http://localhost:5000/api/tickets/call \
+# Login (a sessão fica no cookie, salvo em cookies.txt)
+curl -c cookies.txt -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"attendantId":"attendant_001"}'
+  -d '{"username":"admin","password":"admin123"}'
+
+# Chamar a próxima senha de qualquer fila (80+ e preferenciais primeiro)
+curl -b cookies.txt -X POST http://localhost:5000/api/tickets/call \
+  -H "Content-Type: application/json" -d '{}'
 ```
 
 ## 📊 Tipos de Atendimento Padrão
 
-| Tipo      | Prefixo | Descrição                 |
-| --------- | ------- | ------------------------- |
-| Exame     | A       | Coleta de sangue e exames |
-| Consulta  | B       | Consulta médica geral     |
-| Vacinação | C       | Aplicação de vacinas      |
-| Curativos | D       | Curativos e feridas       |
-| Recepção  | E       | Atendimento de recepção   |
+| Tipo                  | Prefixo | Prioridade      |
+| --------------------- | ------- | --------------- |
+| Consulta (80+)        | CP      | 1ª (80+)        |
+| Exame (80+)           | EP      | 1ª (80+)        |
+| Consulta Preferencial | CS      | 2ª preferencial |
+| Exame Preferencial    | ES      | 2ª preferencial |
+| Consulta              | C       | normal          |
+| Agendar Consultas     | AC      | normal          |
+| Exame                 | E       | normal          |
+| Agendar Exames        | AE      | normal          |
+
+Criados por `npm run seed` (apaga os dados) ou `node backend/seed.js --if-empty` (só se o banco
+estiver vazio). Ao chamar "Qualquer fila" no acionador, as filas 80+ são atendidas primeiro,
+depois as preferenciais e por fim as normais (Lei 10.048/2000 e Lei 13.466/2017).
 
 ## 🐳 Docker
 

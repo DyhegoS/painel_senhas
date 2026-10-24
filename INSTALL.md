@@ -152,10 +152,15 @@ curl http://localhost:5000/api/services
 
 ### 4. Chamar Próxima Senha
 
+Chamar exige login (a sessão fica num cookie):
+
 ```bash
-curl -X POST http://localhost:5000/api/tickets/call \
+curl -c cookies.txt -X POST http://localhost:5000/api/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"attendantId": "attendant_001"}'
+  -d '{"username": "admin", "password": "admin123"}'
+
+curl -b cookies.txt -X POST http://localhost:5000/api/tickets/call \
+  -H "Content-Type: application/json" -d '{}'
 ```
 
 ---
@@ -197,13 +202,31 @@ painel_senhas/
 
 ## 🔧 Variáveis de Ambiente
 
-### Backend (.env)
+### Backend (.env) e totem (mobile/.env)
 
 ```env
+# Backend (backend/.env — modelo completo em backend/.env.example)
 PORT=5000
 MONGODB_URI=mongodb://localhost:27017/painel_senhas
 NODE_ENV=development
-SOCKET_IO_PORT=5000
+JWT_SECRET=troque-por-uma-chave-secreta-longa   # obrigatório em produção
+ADMIN_PASSWORD=admin123                          # senha do admin criado no 1º start
+REPORT_TIMEZONE=America/Sao_Paulo
+CORS_ORIGIN=                 # origens liberadas, separadas por vírgula (vazio = todas)
+TOTEM_TOKEN=                 # se definido, o totem precisa enviar X-Totem-Token
+GENERATE_RATE_LIMIT=30       # senhas por minuto por IP
+PRINT_AGENT_TOKEN=           # segredo compartilhado com o print-agent
+COOKIE_SECURE=false          # true quando servido por HTTPS
+TRUST_PROXY=                 # nº de proxies reversos na frente (ex.: 1)
+
+# MongoDB Atlas (alternativa)
+# MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/painel_senhas
+```
+
+```env
+# Totem (mobile/.env — modelo em mobile/.env.example)
+EXPO_PUBLIC_BACKEND_URL=http://<IP do servidor>:5000
+EXPO_PUBLIC_TOTEM_TOKEN=     # igual ao TOTEM_TOKEN do backend
 ```
 
 ### Usando MongoDB Atlas

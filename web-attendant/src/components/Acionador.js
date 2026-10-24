@@ -1,15 +1,31 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { io } from 'socket.io-client';
-import { api, errorMessage, formatLocation, getToken, SOCKET_URL } from '../api';
+import { api, errorMessage, formatLocation, SESSION_KEY, SOCKET_URL } from '../api';
 import '../App.css';
 import './Acionador.css';
 
 const REFRESH_INTERVAL_MS = 30000;
+// Opção "qualquer fila": o backend chama 80+ e preferenciais antes das demais
+const ANY_QUEUE = 'any';
 
-// Tempo desde a senha mais antiga aguardando, no formato 00:00:00
-function formatWait(oldestCreatedAt, now) {
-  if (!oldestCreatedAt) return '--:--:--';
-  const seconds = Math.max(0, Math.floor((now - new Date(oldestCreatedAt)) / 1000));
+// Junta todas as filas num só resumo, para a opção "qualquer fila"
+function anyQueueSummary(summary) {
+  const oldest = summary
+    .map((s) => s.oldestCreatedAt)
+    .filter(Boolean)
+    .sort((a, b) => new Date(a) - new Date(b))[0];
+  return {
+    _id: undefined,
+    name: null,
+    waiting: summary.reduce((sum, s) => sum + s.waiting, 0),
+    oldestCreatedAt: oldest || null,
+  };
+}
+
+// Tempo decorrido desde uma data (espera na fila, duração do atendimento), no formato 00:00:00
+function formatElapsed(since, now) {
+  if (!since) return '--:--:--';
+  const seconds = Math.max(0, Math.floor((now - new Date(since)) / 1000));
   return [Math.floor(seconds / 3600), Math.floor(seconds / 60) % 60, seconds % 60]
     .map((part) => String(part).padStart(2, '0'))
     .join(':');
@@ -35,14 +51,16 @@ const CallIcon = () => (
 
 function Acionador() {
   const [user, setUser] = useState(null);
-  const [loggedOut, setLoggedOut] = useState(!getToken());
+  const [loggedOut, setLoggedOut] = useState(false);
   const [tab, setTab] = useState('chamada');
   const [summary, setSummary] = useState([]);
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(ANY_QUEUE);
   const [current, setCurrent] = useState(null);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [now, setNow] = useState(() => Date.now());
+  // Diferença entre o relógio do servidor e o deste computador (os horários vêm do servidor)
+  const [clockOffset, setClockOffset] = useState(0);
   const [showNumberCall, setShowNumberCall] = useState(false);
   const [numberServiceId, setNumberServiceId] = useState('');
   const [number, setNumber] = useState('');
@@ -52,6 +70,8 @@ function Acionador() {
       setLoggedOut(true);
       return;
     }
+    // A senha deixou de estar em atendimento (ex.: filas zeradas): libera o acionador
+    if (error.response && error.response.status === 409) setCurrent(null);
     setMessage(errorMessage(error, fallback));
   }, []);
 
@@ -60,7 +80,6 @@ function Acionador() {
       const response = await api.get('/tickets/queue/summary');
       setSummary(response.data);
       const firstId = response.data.length > 0 ? response.data[0]._id : '';
-      setSelectedId((id) => id || firstId);
       setNumberServiceId((id) => id || firstId);
     } catch (error) {
       handleError(error, 'Erro ao carregar as filas');
@@ -81,8 +100,17 @@ function Acionador() {
       .catch((error) => handleError(error, 'Erro ao carregar o atendimento'));
     fetchSummary();
 
-    const socket = io(SOCKET_URL);
-    socket.on('connect', () => socket.emit('identify', { type: 'acionador', token: getToken() }));
+    const sentAt = Date.now();
+    api
+      .get('/health')
+      .then((response) => {
+        const receivedAt = Date.now();
+        setClockOffset(new Date(response.data.timestamp).getTime() - (sentAt + receivedAt) / 2);
+      })
+      .catch(() => {});
+
+    const socket = io(SOCKET_URL, { withCredentials: true });
+    socket.on('connect', () => socket.emit('identify', { type: 'acionador' }));
     socket.on('queue_update', fetchSummary);
 
     const clock = window.setInterval(() => setNow(Date.now()), 1000);
@@ -94,9 +122,11 @@ function Acionador() {
     };
   }, [loggedOut, fetchSummary, handleError]);
 
-  // Saiu do painel de atendimento na janela principal
+  // Saiu (ou entrou de novo) no painel de atendimento na janela principal
   useEffect(() => {
-    const onStorage = () => setLoggedOut(!getToken());
+    const onStorage = (event) => {
+      if (event.key === SESSION_KEY || event.key === null) setLoggedOut(!event.newValue);
+    };
     window.addEventListener('storage', onStorage);
     return () => window.removeEventListener('storage', onStorage);
   }, []);
@@ -118,7 +148,11 @@ function Acionador() {
     run(async () => {
       const response = await api.post('/tickets/call', { serviceTypeId: service._id });
       if (response.data.ticket === null) {
-        setMessage(`Nenhum paciente aguardando em ${service.name}`);
+        setMessage(
+          service.name
+            ? `Nenhum paciente aguardando em ${service.name}`
+            : 'Nenhum paciente aguardando'
+        );
         return;
       }
       setCurrent(response.data);
@@ -160,8 +194,10 @@ function Acionador() {
     );
   }
 
-  const selected = summary.find((s) => s._id === selectedId);
+  const selected =
+    selectedId === ANY_QUEUE ? anyQueueSummary(summary) : summary.find((s) => s._id === selectedId);
   const location = formatLocation(user);
+  const serverNow = now + clockOffset;
 
   return (
     <div className="acionador">
@@ -180,6 +216,13 @@ function Acionador() {
           <div className="acionador-label">Em atendimento</div>
           <div className="acionador-ticket">{current.number}</div>
           <div className="acionador-service">{current.serviceType}</div>
+          <div className="acionador-elapsed" title="Tempo desde a chamada">
+            <ClockIcon />
+            <span className="acionador-label">Tempo de atendimento</span>
+            <output className="acionador-timer">
+              {formatElapsed(current.calledAt, serverNow)}
+            </output>
+          </div>
           <div className="acionador-actions">
             <button className="btn btn-secondary" onClick={recall} disabled={busy}>
               🔊 Rechamar
@@ -222,6 +265,7 @@ function Acionador() {
                 onChange={(event) => setSelectedId(event.target.value)}
                 aria-label="Serviço"
               >
+                <option value={ANY_QUEUE}>Qualquer fila (80+ e preferenciais primeiro)</option>
                 {summary.map((service) => (
                   <option key={service._id} value={service._id}>
                     {service.name}
@@ -237,7 +281,7 @@ function Acionador() {
                 <span title="Maior tempo de espera">
                   <ClockIcon />
                   <output className="acionador-timer">
-                    {formatWait(selected && selected.oldestCreatedAt, now)}
+                    {formatElapsed(selected && selected.oldestCreatedAt, serverNow)}
                   </output>
                 </span>
               </div>
@@ -311,7 +355,7 @@ function Acionador() {
                     <tr key={service._id}>
                       <td>{service.name}</td>
                       <td className="num">{service.waiting}</td>
-                      <td className="num">{formatWait(service.oldestCreatedAt, now)}</td>
+                      <td className="num">{formatElapsed(service.oldestCreatedAt, serverNow)}</td>
                       <td>
                         <button
                           className="btn btn-primary btn-small"

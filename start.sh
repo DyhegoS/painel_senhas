@@ -27,34 +27,9 @@ cd ..
 # Aguardar backend estar pronto
 sleep 3
 
-# Inicializar banco de dados com tipos de atendimento padrão
+# Inicializar banco de dados com os tipos de atendimento padrão (só se estiver vazio)
 echo "📊 Inicializando banco de dados..."
-cat > /tmp/init_db.js << 'EOF'
-const mongoose = require('mongoose');
-const ServiceType = require('./backend/src/models/ServiceType');
-
-mongoose.connect('mongodb://localhost:27017/painel_senhas');
-
-const defaultServices = [
-  { name: 'Exame', prefix: 'A', description: 'Coleta de sangue e exames' },
-  { name: 'Consulta', prefix: 'B', description: 'Consulta médica geral' },
-  { name: 'Vacinação', prefix: 'C', description: 'Aplicação de vacinas' },
-  { name: 'Curativos', prefix: 'D', description: 'Curativos e feridas' },
-  { name: 'Recepção', prefix: 'E', description: 'Atendimento de recepção' }
-];
-
-ServiceType.insertMany(defaultServices)
-  .then(() => {
-    console.log('✓ Banco de dados inicializado com sucesso!');
-    process.exit(0);
-  })
-  .catch(err => {
-    console.error('✗ Erro ao inicializar banco:', err);
-    process.exit(1);
-  });
-EOF
-
-sleep 2
+(cd backend && node seed.js --if-empty)
 
 # Informações de acesso
 echo ""

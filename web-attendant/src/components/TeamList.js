@@ -5,6 +5,7 @@ const FILTERS = [
   { value: 'all', label: 'Todos' },
   { value: 'attendant', label: 'Atendentes' },
   { value: 'doctor', label: 'Médicos' },
+  { value: 'supervisor', label: 'Supervisores' },
   { value: 'admin', label: 'Administradores' },
 ];
 

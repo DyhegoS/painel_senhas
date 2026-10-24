@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const { badRequest, notFound, conflict, assertId } = require('../errors');
 
 const EDITABLE_FIELDS = ['name', 'username', 'role', 'locationType', 'locationNumber', 'active'];
 
@@ -12,14 +13,14 @@ function pick(data) {
 
 function validatePassword(password) {
   if (typeof password !== 'string' || password.length < 6) {
-    throw new Error('A senha deve ter pelo menos 6 caracteres');
+    throw badRequest('A senha deve ter pelo menos 6 caracteres');
   }
 }
 
 // Mensagem amigável para nome de usuário duplicado
 function translateError(error) {
   if (error.code === 11000) {
-    return new Error('Já existe um usuário com este login');
+    return conflict('Já existe um usuário com este login');
   }
   return error;
 }
@@ -61,9 +62,10 @@ async function createUser(data) {
 
 // Atualizar usuário (senha é opcional)
 async function updateUser(id, data) {
+  assertId(id, 'Usuário não encontrado');
   const user = await User.findById(id);
   if (!user) {
-    throw new Error('Usuário não encontrado');
+    throw notFound('Usuário não encontrado');
   }
 
   const changes = pick(data);
@@ -72,7 +74,7 @@ async function updateUser(id, data) {
     user.active &&
     ((changes.role && changes.role !== 'admin') || changes.active === false);
   if (losesAdmin && (await countActiveAdmins(user._id)) === 0) {
-    throw new Error('É necessário manter pelo menos um administrador ativo');
+    throw conflict('É necessário manter pelo menos um administrador ativo');
   }
 
   Object.assign(user, changes);
@@ -91,12 +93,13 @@ async function updateUser(id, data) {
 
 // Remover usuário
 async function deleteUser(id) {
+  assertId(id, 'Usuário não encontrado');
   const user = await User.findById(id);
   if (!user) {
-    throw new Error('Usuário não encontrado');
+    throw notFound('Usuário não encontrado');
   }
   if (user.role === 'admin' && (await countActiveAdmins(user._id)) === 0) {
-    throw new Error('É necessário manter pelo menos um administrador ativo');
+    throw conflict('É necessário manter pelo menos um administrador ativo');
   }
   await user.deleteOne();
   return user.toPublic();

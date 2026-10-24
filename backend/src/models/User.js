@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const ROLES = ['admin', 'attendant', 'doctor'];
+// supervisor: liderança, só consulta (relatórios, equipe, status), sem funções de administrador
+const ROLES = ['admin', 'supervisor', 'attendant', 'doctor'];
 const LOCATION_TYPES = ['Guichê', 'Consultório', 'Sala'];
 
 const userSchema = new mongoose.Schema({

@@ -13,11 +13,19 @@ const serviceTypeSchema = new mongoose.Schema({
     maxlength: 3,
   },
   description: String,
+  // Ordem de chamada entre filas: 2 = 80+, 1 = preferencial, 0 = normal
+  priority: {
+    type: Number,
+    enum: [0, 1, 2],
+    default: 0,
+  },
   active: {
     type: Boolean,
     default: true,
   },
-  // Senhas criadas antes desta data não contam para a numeração
+  // Último número emitido; incrementado de forma atômica a cada senha gerada
+  counter: Number,
+  // Data do último reinício da numeração (zerar filas)
   counterResetAt: Date,
   createdAt: {
     type: Date,

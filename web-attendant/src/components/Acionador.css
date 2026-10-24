@@ -191,6 +191,30 @@
   font-size: 16px;
 }
 
+.acionador-elapsed {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 8px;
+}
+
+.acionador-elapsed svg {
+  width: 20px;
+  height: 20px;
+  fill: #5b6670;
+}
+
+.acionador-elapsed .acionador-timer {
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: #5b6670;
+  color: #fff;
+  font-family: 'Courier New', monospace;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 1px;
+}
+
 .acionador-actions {
   display: flex;
   flex-direction: column;

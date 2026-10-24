@@ -4,10 +4,24 @@ import { io } from 'socket.io-client';
 
 import { SOCKET_URL } from '../config';
 
+// Tempo até o totem voltar sozinho para a escolha de atendimento
+const AUTO_RETURN_SECONDS = 10;
+
 export default function TicketScreen({ route, navigation }) {
   const { ticket } = route.params;
   const [status, setStatus] = useState(ticket.status);
   const [position, setPosition] = useState(ticket.position);
+  const [secondsLeft, setSecondsLeft] = useState(AUTO_RETURN_SECONDS);
+
+  // Contagem regressiva: o próximo paciente encontra o totem pronto sem ninguém tocar em "Voltar"
+  useEffect(() => {
+    const timer = setInterval(() => setSecondsLeft((s) => Math.max(s - 1, 0)), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (secondsLeft === 0 && navigation.canGoBack()) navigation.goBack();
+  }, [secondsLeft, navigation]);
 
   useEffect(() => {
     const socket = io(SOCKET_URL);
@@ -18,9 +32,9 @@ export default function TicketScreen({ route, navigation }) {
     });
 
     socket.on('ticket_status_update', (data) => {
-      if (data.ticketId === ticket._id) {
+      if (data.ticketId === String(ticket._id)) {
         setStatus(data.status);
-        setPosition(data.position);
+        if (data.position !== undefined) setPosition(data.position);
       }
     });
 
@@ -37,6 +51,8 @@ export default function TicketScreen({ route, navigation }) {
         return 'Atendimento concluído';
       case 'cancelled':
         return 'Senha cancelada';
+      case 'absent':
+        return 'Não compareceu à chamada. Procure a recepção.';
       default:
         return 'Status desconhecido';
     }
@@ -49,6 +65,7 @@ export default function TicketScreen({ route, navigation }) {
       case 'attended':
         return '#28a745';
       case 'cancelled':
+      case 'absent':
         return '#dc3545';
       default:
         return '#0066cc';
@@ -75,7 +92,7 @@ export default function TicketScreen({ route, navigation }) {
       )}
 
       <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-        <Text style={styles.backButtonText}>Voltar</Text>
+        <Text style={styles.backButtonText}>Voltar ({secondsLeft}s)</Text>
       </TouchableOpacity>
     </View>
   );

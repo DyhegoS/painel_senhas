@@ -7,7 +7,12 @@ const COUNTER_NUMBER = '1';
 const AUDIO_BASE = `${process.env.PUBLIC_URL}/audio`;
 const PLACE_NAME = process.env.REACT_APP_PLACE_NAME || 'Sala de Espera';
 const LOGO_URL = process.env.REACT_APP_LOGO_URL || '';
+// Fuso do relógio; sem configuração, usa o do computador
+const TIMEZONE = process.env.REACT_APP_TIMEZONE || undefined;
 const HIGHLIGHT_DURATION_MS = 8000;
+// Senha atual + 5 no histórico
+const CALLS_SHOWN = 6;
+const CLOCK_SYNC_INTERVAL_MS = 10 * 60 * 1000;
 
 // Local informado pelo usuário que chamou a senha (padrão: Guichê do painel)
 const locationOf = (ticket) => ({
@@ -15,12 +20,19 @@ const locationOf = (ticket) => ({
   number: ticket.locationNumber || COUNTER_NUMBER,
 });
 
+const getJson = (path) =>
+  fetch(`${SOCKET_URL}/api${path}`).then((response) =>
+    response.ok ? response.json() : Promise.reject(new Error(`HTTP ${response.status}`))
+  );
+
 function App() {
   const [calledTickets, setCalledTickets] = useState([]);
   const [currentTicket, setCurrentTicket] = useState(null);
   const [nextTickets, setNextTickets] = useState([]);
-  const [audioEnabled, setAudioEnabled] = useState(false);
+  // O navegador só bloqueia o som até a primeira interação (ou nunca, se configurado)
+  const [audioBlocked, setAudioBlocked] = useState(false);
   const [audioMessage, setAudioMessage] = useState('');
+  const [clockOffset, setClockOffset] = useState(0);
   const [now, setNow] = useState(() => new Date());
   const [isHighlighted, setIsHighlighted] = useState(false);
   const [callKey, setCallKey] = useState(0);
@@ -29,26 +41,43 @@ function App() {
   const audioContextRef = useRef(null);
   const audioPlayerRef = useRef(null);
   const announcementTimerRef = useRef(null);
-  const audioEnabledRef = useRef(false);
+  const liveCallsRef = useRef(0);
 
-  const playBeep = useCallback(() => {
-    const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (!AudioContextClass) {
+  const getAudioContext = useCallback(() => {
+    if (!audioContextRef.current) {
+      const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextClass) return null;
+      const context = new AudioContextClass();
+      // O aviso de som bloqueado acompanha o estado real do áudio
+      context.onstatechange = () => setAudioBlocked(context.state === 'suspended');
+      audioContextRef.current = context;
+    }
+    return audioContextRef.current;
+  }, []);
+
+  // Tenta liberar o áudio; o navegador só deixa sem interação se o autoplay estiver permitido
+  const unlockAudio = useCallback(() => {
+    const context = getAudioContext();
+    if (!context) {
       setAudioMessage('Este navegador não oferece suporte ao som.');
       return;
     }
+    if (context.state === 'running') {
+      setAudioBlocked(false);
+      return;
+    }
+    // Sem permissão, o resume() do Chrome fica pendente sem rejeitar: confere o estado depois
+    context.resume().catch(() => {});
+    window.setTimeout(() => setAudioBlocked(context.state === 'suspended'), 500);
+  }, [getAudioContext]);
+
+  const playBeep = useCallback(() => {
+    const context = getAudioContext();
+    if (!context) return;
 
     try {
-      if (!audioContextRef.current) {
-        audioContextRef.current = new AudioContextClass();
-      }
-
-      const context = audioContextRef.current;
       if (context.state !== 'running') {
-        context.resume().catch((error) => {
-          console.error('Erro ao ativar o áudio do painel:', error);
-          setAudioMessage('Não foi possível ativar o áudio neste navegador.');
-        });
+        context.resume().catch(() => setAudioBlocked(true));
       }
 
       const oscillator = context.createOscillator();
@@ -64,7 +93,7 @@ function App() {
       console.error('Erro ao reproduzir o som do painel:', error);
       setAudioMessage('Não foi possível reproduzir o som neste navegador.');
     }
-  }, []);
+  }, [getAudioContext]);
 
   const playTicketAudio = useCallback((ticket) => {
     const [prefix, digits] = String(ticket.number).split('-');
@@ -110,6 +139,10 @@ function App() {
       };
       player.play().catch((error) => {
         player.onended = null;
+        if (error.name === 'NotAllowedError') {
+          setAudioBlocked(true);
+          return;
+        }
         console.error('Erro ao reproduzir o áudio da chamada:', error);
         setAudioMessage('Não foi possível reproduzir o áudio da chamada.');
       });
@@ -119,15 +152,20 @@ function App() {
     playNext();
   }, []);
 
-  const enableAudio = () => {
-    audioEnabledRef.current = true;
-    setAudioEnabled(true);
-    setAudioMessage('');
-    playBeep();
-  };
+  // Som sempre ativo: tenta liberar ao abrir e em qualquer toque, clique ou tecla
+  // (inclusive do controle remoto da TV), sem precisar de botão
+  useEffect(() => {
+    unlockAudio();
+    const events = ['pointerdown', 'keydown', 'touchstart'];
+    events.forEach((event) => window.addEventListener(event, unlockAudio, { passive: true }));
+    return () => events.forEach((event) => window.removeEventListener(event, unlockAudio));
+  }, [unlockAudio]);
 
+  // Novas chamadas vão para o topo; uma rechamada sai da posição antiga (como no servidor)
   const addToCalledTickets = useCallback((ticket) => {
-    setCalledTickets((prev) => [ticket, ...prev.slice(0, 5)]);
+    setCalledTickets((prev) =>
+      [ticket, ...prev.filter((t) => t._id !== ticket._id)].slice(0, CALLS_SHOWN)
+    );
   }, []);
 
   useEffect(() => {
@@ -135,6 +173,7 @@ function App() {
     socket.on('connect', () => socket.emit('identify', { type: 'panel' }));
 
     socket.on('ticket_called', (ticket) => {
+      liveCallsRef.current += 1;
       setCurrentTicket(ticket);
       addToCalledTickets(ticket);
       setCallKey((key) => key + 1);
@@ -144,24 +183,69 @@ function App() {
         () => setIsHighlighted(false),
         HIGHLIGHT_DURATION_MS
       );
-      if (audioEnabledRef.current) {
-        playBeep();
-        window.clearTimeout(announcementTimerRef.current);
-        announcementTimerRef.current = window.setTimeout(() => playTicketAudio(ticket), 300);
-      }
+      playBeep();
+      window.clearTimeout(announcementTimerRef.current);
+      announcementTimerRef.current = window.setTimeout(() => playTicketAudio(ticket), 300);
     });
 
-    socket.on('queue_update', (queue) => {
-      setNextTickets(queue.slice(0, 5));
-    });
+    // A fila inclui senhas já chamadas; "Próximas" mostra só quem ainda aguarda
+    const showQueue = (queue) => {
+      setNextTickets(queue.filter((ticket) => ticket.status === 'waiting').slice(0, 5));
+    };
+    socket.on('queue_update', showQueue);
+
+    // Ao abrir ou reconectar, restaura a tela a partir do servidor: assim todos os painéis
+    // mostram o mesmo, mesmo depois de recarregar ou de uma queda de rede (sem tocar áudio)
+    const loadRecentCalls = () => {
+      const liveCallsAtStart = liveCallsRef.current;
+      getJson(`/tickets/recent-calls?limit=${CALLS_SHOWN}`)
+        .then((calls) => {
+          // Chegou uma chamada ao vivo durante a consulta: busca de novo para não perdê-la
+          if (liveCallsRef.current !== liveCallsAtStart) {
+            loadRecentCalls();
+            return;
+          }
+          setCalledTickets(calls);
+          setCurrentTicket(calls[0] || null);
+        })
+        .catch((error) => console.error('Erro ao carregar as últimas chamadas:', error));
+    };
+
+    const loadQueue = () => {
+      getJson('/tickets/queue')
+        .then(showQueue)
+        .catch((error) => console.error('Erro ao carregar a fila:', error));
+    };
+
+    socket.on('connect', loadRecentCalls);
+    socket.on('connect', loadQueue);
 
     return () => socket.disconnect();
   }, [addToCalledTickets, playBeep, playTicketAudio]);
 
+  // Relógio pela hora do servidor, para todos os painéis mostrarem a mesma hora
   useEffect(() => {
-    const timer = window.setInterval(() => setNow(new Date()), 1000);
+    const syncClock = () => {
+      const sentAt = Date.now();
+      getJson('/health')
+        .then(({ timestamp }) => {
+          const receivedAt = Date.now();
+          // Desconta metade do tempo de ida e volta da requisição
+          setClockOffset(new Date(timestamp).getTime() - (sentAt + receivedAt) / 2);
+        })
+        .catch((error) => console.error('Erro ao sincronizar o relógio:', error));
+    };
+    syncClock();
+    const timer = window.setInterval(syncClock, CLOCK_SYNC_INTERVAL_MS);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const tick = () => setNow(new Date(Date.now() + clockOffset));
+    tick();
+    const timer = window.setInterval(tick, 1000);
+    return () => window.clearInterval(timer);
+  }, [clockOffset]);
 
   useEffect(
     () => () => {
@@ -180,8 +264,17 @@ function App() {
   );
 
   const recentTickets = calledTickets.slice(1);
-  const time = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  const date = now.toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+  const time = now.toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: TIMEZONE,
+  });
+  const date = now.toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: '2-digit',
+    month: 'long',
+    timeZone: TIMEZONE,
+  });
 
   return (
     <div className="panel">
@@ -199,12 +292,16 @@ function App() {
       </header>
 
       <main className={`current-section${isHighlighted ? ' is-calling' : ''}`}>
-        <div className="audio-control">
-          <button type="button" onClick={enableAudio} className={audioEnabled ? 'is-on' : ''}>
-            {audioEnabled ? 'Som e voz ativados' : 'Ativar som e voz'}
-          </button>
-          {audioMessage && <span role="status">{audioMessage}</span>}
-        </div>
+        {(audioBlocked || audioMessage) && (
+          <div className="audio-control" role="status">
+            {audioBlocked && (
+              <span>
+                Som bloqueado pelo navegador: toque na tela ou pressione uma tecla para ativar.
+              </span>
+            )}
+            {audioMessage && <span>{audioMessage}</span>}
+          </div>
+        )}
         {currentTicket ? (
           <div key={callKey} className="current-ticket">
             <div className="label">Senha</div>
@@ -227,8 +324,8 @@ function App() {
         <div className="label">Últimas chamadas</div>
         <ol className="history">
           {recentTickets.length === 0 && <li className="history-empty">Nenhuma chamada ainda</li>}
-          {recentTickets.map((ticket, index) => (
-            <li key={`${ticket._id}-${index}`} className="history-item">
+          {recentTickets.map((ticket) => (
+            <li key={ticket._id} className="history-item">
               <span className="number">{ticket.number}</span>
               <span className="counter">
                 {locationOf(ticket).type} {locationOf(ticket).number}

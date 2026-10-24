@@ -6,8 +6,10 @@ Wants=network-online.target
 [Service]
 User=pi
 WorkingDirectory=/home/pi/print-agent
+# Ajuste para o IP do computador que roda o backend
 Environment=BACKEND_URL=http://192.168.50.8:5000
 Environment=PRINTER_DEVICE=/dev/usb/lp0
+Environment=PRINT_AGENT_TOKEN=
 ExecStart=/usr/bin/node src/index.js
 Restart=always
 RestartSec=5

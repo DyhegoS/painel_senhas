@@ -61,7 +61,7 @@ fi
 echo ""
 echo -e "${BLUE}🗄${NC}  Inicializando banco de dados..."
 cd backend
-node seed.js > /dev/null 2>&1 || true
+node seed.js --if-empty || echo "⚠️  Não foi possível inicializar o banco (o MongoDB está rodando?)"
 cd ..
 echo -e "${GREEN}✓${NC} Banco de dados inicializado"
 

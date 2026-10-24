@@ -1,42 +1,51 @@
 import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
-import { api, getToken, setToken, ROLE_LABELS, formatLocation, SOCKET_URL } from './api';
+import { api, markSession, ROLE_LABELS, formatLocation, SOCKET_URL } from './api';
 import Login from './components/Login';
 import Welcome from './components/Welcome';
 import UserAdmin from './components/UserAdmin';
 import TeamList from './components/TeamList';
 import Reports from './components/Reports';
+import ServiceTimes from './components/ServiceTimes';
 import QueueReset from './components/QueueReset';
 import Connections from './components/Connections';
 import SystemStatus from './components/SystemStatus';
 import './App.css';
 
-// Abas do painel; as marcadas com admin só aparecem para o administrador
+// Abas do painel e os perfis que veem cada uma. O supervisor (liderança) só consulta:
+// não cadastra usuários, não zera filas e não chama senhas.
+const STAFF = ['admin', 'attendant', 'doctor'];
+const MANAGERS = ['admin', 'supervisor'];
 const TABS = [
-  { id: 'attendance', label: 'Atendimento' },
-  { id: 'team', label: 'Equipe', admin: true },
-  { id: 'users', label: 'Usuários', admin: true },
-  { id: 'reports', label: 'Relatórios', admin: true },
-  { id: 'queues', label: 'Filas', admin: true },
-  { id: 'connections', label: 'Conectados', admin: true },
-  { id: 'status', label: 'Status', admin: true },
+  { id: 'attendance', label: 'Atendimento', roles: STAFF },
+  { id: 'team', label: 'Equipe', roles: MANAGERS },
+  { id: 'users', label: 'Usuários', roles: ['admin'] },
+  { id: 'reports', label: 'Relatórios', roles: MANAGERS },
+  { id: 'service-times', label: 'Tempos de atendimento', roles: MANAGERS },
+  { id: 'queues', label: 'Filas', roles: ['admin'] },
+  { id: 'connections', label: 'Conectados', roles: MANAGERS },
+  { id: 'status', label: 'Status', roles: MANAGERS },
 ];
+
+// Aba aberta logo após o login
+const DEFAULT_VIEW = { admin: 'users', supervisor: 'connections' };
+const defaultView = (role) => DEFAULT_VIEW[role] || 'attendance';
 
 function App() {
   const [user, setUser] = useState(null);
-  const [checkingSession, setCheckingSession] = useState(Boolean(getToken()));
+  const [checkingSession, setCheckingSession] = useState(true);
   const [view, setView] = useState('attendance');
 
-  // Restaurar sessão salva
+  // Restaurar a sessão do cookie (se ainda for válida)
   useEffect(() => {
-    if (!getToken()) return;
     api
       .get('/auth/me')
       .then((response) => {
+        markSession(true);
         setUser(response.data);
-        setView(response.data.role === 'admin' ? 'users' : 'attendance');
+        setView(defaultView(response.data.role));
       })
-      .catch(() => setToken(null))
+      .catch(() => markSession(false))
       .finally(() => setCheckingSession(false));
   }, []);
 
@@ -48,9 +57,9 @@ function App() {
         if (
           error.response &&
           error.response.status === 401 &&
-          !error.config.url.includes('/auth/login')
+          !error.config.url.includes('/auth/')
         ) {
-          setToken(null);
+          markSession(false);
           setUser(null);
         }
         return Promise.reject(error);
@@ -59,23 +68,29 @@ function App() {
     return () => api.interceptors.response.eject(interceptor);
   }, []);
 
-  const handleLogin = (token, loggedUser) => {
-    if (token) setToken(token);
+  const handleLogin = (loggedUser) => {
+    markSession(true);
     setUser(loggedUser);
-    setView(loggedUser.role === 'admin' ? 'users' : 'attendance');
+    setView(defaultView(loggedUser.role));
   };
 
   // Registra o usuário como conectado enquanto o painel estiver aberto
   useEffect(() => {
     if (!user) return undefined;
-    const socket = io(SOCKET_URL);
-    socket.on('connect', () => socket.emit('identify', { type: 'attendant', token: getToken() }));
+    // withCredentials envia o cookie da sessão, que identifica o usuário no backend
+    const socket = io(SOCKET_URL, { withCredentials: true });
+    socket.on('connect', () => socket.emit('identify', { type: 'attendant' }));
     return () => socket.disconnect();
   }, [user]);
 
   const logout = () => {
-    setToken(null);
-    setUser(null);
+    api
+      .post('/auth/logout')
+      .catch(() => {})
+      .finally(() => {
+        markSession(false);
+        setUser(null);
+      });
   };
 
   if (checkingSession) {
@@ -87,8 +102,8 @@ function App() {
   }
 
   const location = formatLocation(user);
-  const tabs = TABS.filter((tab) => !tab.admin || user.role === 'admin');
-  const currentView = tabs.some((tab) => tab.id === view) ? view : 'attendance';
+  const tabs = TABS.filter((tab) => tab.roles.includes(user.role));
+  const currentView = tabs.some((tab) => tab.id === view) ? view : tabs[0].id;
 
   return (
     <div className="container">
@@ -124,6 +139,8 @@ function App() {
         <TeamList currentUser={user} />
       ) : currentView === 'reports' ? (
         <Reports />
+      ) : currentView === 'service-times' ? (
+        <ServiceTimes />
       ) : currentView === 'queues' ? (
         <QueueReset />
       ) : currentView === 'connections' ? (

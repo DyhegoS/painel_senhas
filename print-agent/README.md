@@ -40,10 +40,11 @@ Tablet (app) ──POST /api/tickets/generate──▶ Backend ──WebSocket�
 
 | Variável         | Padrão                         | Descrição                         |
 | ---------------- | ------------------------------ | --------------------------------- |
-| `BACKEND_URL`    | `http://192.168.50.8:5000`     | Endereço do backend               |
+| `BACKEND_URL`    | _(obrigatório)_                | Endereço do backend, ex.: `http://192.168.0.10:5000` |
 | `PRINTER_DEVICE` | `/dev/usb/lp0`                 | Dispositivo da impressora         |
 | `PRINT_HEADER`   | `PAINEL DE SENHAS`             | Título no topo do papel           |
 | `PRINT_FOOTER`   | `Aguarde ser chamado no painel`| Mensagem no rodapé                |
+| `PRINT_AGENT_TOKEN` | _(vazio)_                    | Igual ao `PRINT_AGENT_TOKEN` do backend; sem ele o backend recusa a impressora quando o token está configurado |
 
 Para alterar, edite as linhas `Environment=` em `/etc/systemd/system/painel-print.service`
 e rode `sudo systemctl daemon-reload && sudo systemctl restart painel-print`.

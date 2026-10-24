@@ -1,13 +1,16 @@
 FROM node:18-alpine
 
 WORKDIR /app
+ENV NODE_ENV=production
 
-COPY package*.json ./
+COPY --chown=node:node package*.json ./
 
-RUN npm install
+RUN npm ci --omit=dev && chown -R node:node /app
 
-COPY . .
+COPY --chown=node:node . .
 
 EXPOSE 5000
 
-CMD ["npm", "run", "dev"]
+USER node
+
+CMD ["node", "src/server.js"]
