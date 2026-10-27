@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Totem de Senhas",
+    "slug": "painel-senhas-totem",
+    "version": "1.0.1",
+    "orientation": "default",
+    "backgroundColor": "#f5f5f5",
+    "platforms": ["android", "web"],
+    "androidStatusBar": {
+      "hidden": true,
+      "translucent": true
+    },
+    "android": {
+      "package": "com.painelsenhas.totem",
+      "versionCode": 2
+    },
+    "plugins": [
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}

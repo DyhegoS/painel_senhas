@@ -2,13 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { io } from 'socket.io-client';
 
-import { SOCKET_URL } from '../config';
+import { useSettings } from '../config';
 
 // Tempo até o totem voltar sozinho para a escolha de atendimento
 const AUTO_RETURN_SECONDS = 10;
 
 export default function TicketScreen({ route, navigation }) {
   const { ticket } = route.params;
+  const { socketUrl } = useSettings();
   const [status, setStatus] = useState(ticket.status);
   const [position, setPosition] = useState(ticket.position);
   const [secondsLeft, setSecondsLeft] = useState(AUTO_RETURN_SECONDS);
@@ -24,7 +25,7 @@ export default function TicketScreen({ route, navigation }) {
   }, [secondsLeft, navigation]);
 
   useEffect(() => {
-    const socket = io(SOCKET_URL);
+    const socket = io(socketUrl);
 
     socket.on('connect', () => {
       console.log('Conectado ao servidor');
@@ -39,7 +40,7 @@ export default function TicketScreen({ route, navigation }) {
     });
 
     return () => socket.disconnect();
-  }, [ticket._id]);
+  }, [ticket._id, socketUrl]);
 
   const getStatusMessage = () => {
     switch (status) {

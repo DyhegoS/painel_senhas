@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   View,
   ScrollView,
@@ -7,11 +7,18 @@ import {
   Text,
   ActivityIndicator,
   Alert,
+  BackHandler,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import axios from 'axios';
 import { io } from 'socket.io-client';
 
-import { API_URL, SOCKET_URL, TOTEM_HEADERS } from '../config';
+import { useSettings, REQUEST_TIMEOUT_MS } from '../config';
+
+// Sem servidor, tenta carregar os serviços de novo a cada intervalo
+const RETRY_INTERVAL_MS = 10000;
+// Segurar o título por este tempo abre os ajustes do totem
+const SETTINGS_PRESS_MS = 3000;
 
 // Cor do botão conforme o tipo de atendimento
 const CARD_COLORS = {
@@ -31,31 +38,53 @@ function cardColor(service) {
 }
 
 export default function HomeScreen({ navigation }) {
+  const { apiUrl, socketUrl, totemHeaders } = useSettings();
   const [services, setServices] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [offline, setOffline] = useState(false);
   const [generating, setGenerating] = useState(false);
+
+  const fetchServices = useCallback(async () => {
+    try {
+      const response = await axios.get(`${apiUrl}/services`, { timeout: REQUEST_TIMEOUT_MS });
+      setServices(response.data);
+      setOffline(false);
+    } catch (error) {
+      console.error('Erro ao buscar serviços:', error);
+      setOffline(true);
+    } finally {
+      setLoading(false);
+    }
+  }, [apiUrl]);
 
   useEffect(() => {
     fetchServices();
-  }, []);
+  }, [fetchServices]);
 
-  // Mantém o totem visível no status do sistema
+  // Servidor fora do ar: continua tentando sozinho até voltar
   useEffect(() => {
-    const socket = io(SOCKET_URL);
-    socket.on('connect', () => socket.emit('identify', { type: 'totem' }));
-    return () => socket.disconnect();
-  }, []);
+    if (!offline) return undefined;
+    const timer = setInterval(fetchServices, RETRY_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [offline, fetchServices]);
 
-  const fetchServices = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/services`);
-      setServices(response.data);
-      setLoading(false);
-    } catch (error) {
-      console.error('Erro ao buscar serviços:', error);
-      setLoading(false);
-    }
-  };
+  // Mantém o totem visível no status do sistema; ao reconectar, recarrega os serviços
+  useEffect(() => {
+    const socket = io(socketUrl);
+    socket.on('connect', () => {
+      socket.emit('identify', { type: 'totem' });
+      fetchServices();
+    });
+    return () => socket.disconnect();
+  }, [socketUrl, fetchServices]);
+
+  // O botão "voltar" do Android não fecha o totem
+  useFocusEffect(
+    useCallback(() => {
+      const subscription = BackHandler.addEventListener('hardwareBackPress', () => true);
+      return () => subscription.remove();
+    }, [])
+  );
 
   // Bloqueia novos toques enquanto a senha é gerada (evita duas senhas num toque duplo)
   const generateTicket = async (serviceId) => {
@@ -63,9 +92,9 @@ export default function HomeScreen({ navigation }) {
     setGenerating(true);
     try {
       const response = await axios.post(
-        `${API_URL}/tickets/generate`,
+        `${apiUrl}/tickets/generate`,
         { serviceTypeId: serviceId },
-        { headers: TOTEM_HEADERS }
+        { headers: totemHeaders, timeout: REQUEST_TIMEOUT_MS }
       );
       navigation.navigate('Ticket', { ticket: response.data });
     } catch (error) {
@@ -86,9 +115,38 @@ export default function HomeScreen({ navigation }) {
 
   return (
     <ScrollView style={styles.container}>
-      <View style={styles.header}>
+      <TouchableOpacity
+        activeOpacity={1}
+        delayLongPress={SETTINGS_PRESS_MS}
+        onLongPress={() => navigation.navigate('Settings')}
+        style={styles.header}
+      >
         <Text style={styles.headerText}>Escolha o atendimento</Text>
-      </View>
+      </TouchableOpacity>
+
+      {offline && (
+        <View style={styles.offline}>
+          <Text style={styles.offlineTitle}>Sem conexão com o servidor</Text>
+          <Text style={styles.offlineText}>
+            Tentando novamente… Se continuar, procure a recepção.
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchServices}>
+            <Text style={styles.retryText}>Tentar agora</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
+      {!offline && services.length === 0 && (
+        <View style={styles.offline}>
+          <Text style={styles.offlineTitle}>Nenhum tipo de atendimento disponível</Text>
+          <Text style={styles.offlineText}>
+            Cadastre os serviços no servidor e toque em atualizar.
+          </Text>
+          <TouchableOpacity style={styles.retryButton} onPress={fetchServices}>
+            <Text style={styles.retryText}>Atualizar</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.servicesGrid}>
         {services.map((service) => (
@@ -171,5 +229,36 @@ const styles = StyleSheet.create({
   },
   disabled: {
     opacity: 0.5,
+  },
+  offline: {
+    backgroundColor: '#fff3cd',
+    borderColor: '#ffe08a',
+    borderWidth: 1,
+    borderRadius: 10,
+    marginHorizontal: 12,
+    marginBottom: 12,
+    padding: 16,
+    alignItems: 'center',
+  },
+  offlineTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#664d03',
+  },
+  offlineText: {
+    fontSize: 14,
+    color: '#664d03',
+    marginTop: 4,
+  },
+  retryButton: {
+    marginTop: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
+    borderRadius: 20,
+    backgroundColor: '#0066cc',
+  },
+  retryText: {
+    color: '#fff',
+    fontWeight: '600',
   },
 });

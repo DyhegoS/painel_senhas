@@ -87,9 +87,15 @@ Os containers voltam sozinhos depois de reiniciar o servidor (`restart: unless-s
 
 ## 4. Primeiro acesso
 
-1. Abra `http://<IP>/` e entre com `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
-2. **Troque a senha do administrador** e cadastre os usuários (atendentes, médicos e locais).
-3. Confira os tipos de atendimento.
+1. Crie os tipos de atendimento (Exame, Consulta, preferenciais…). Sem eles, o totem não tem o
+   que mostrar. O comando só age se o banco ainda não tiver serviços e não cria senhas de teste:
+
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file deploy/.env exec backend node seed.js --services-only
+   ```
+
+2. Abra `http://<IP>/` e entre com `ADMIN_USERNAME` / `ADMIN_PASSWORD`.
+3. **Troque a senha do administrador** e cadastre os usuários (atendentes, médicos e locais).
 
 ## 5. Ligar os outros equipamentos
 
@@ -101,12 +107,8 @@ modo quiosque com áudio liberado:
 google-chrome --kiosk --autoplay-policy=no-user-gesture-required http://<IP>/painel/
 ```
 
-**Totem (app mobile):** em `mobile/.env`:
-
-```
-EXPO_PUBLIC_BACKEND_URL=http://<IP>
-EXPO_PUBLIC_TOTEM_TOKEN=<mesmo TOTEM_TOKEN do deploy/.env, se configurado>
-```
+**Totem (APK Android):** instale o APK e, na primeira abertura, informe o endereço `<IP>` e o
+`TOTEM_TOKEN` (se configurado) na tela de ajustes do app. Veja [mobile/README.md](../mobile/README.md).
 
 **Agente de impressão (Raspberry Pi):** em `print-agent/painel-print.service`:
 
@@ -157,6 +159,6 @@ docker compose -f docker-compose.prod.yml --env-file deploy/.env \
 | `mongodb` reiniciando, log com "illegal instruction" | CPU sem AVX: use `MONGO_IMAGE=mongo:4.4` |
 | Página abre mas não loga / não atualiza | Abra pelo IP do servidor (não `localhost` de outra máquina) e confira `curl http://<IP>/api/health` |
 | TV não fala | Clique em **Ativar som e voz** depois de cada recarga, ou use o modo quiosque acima |
-| Totem não gera senha | `EXPO_PUBLIC_BACKEND_URL` sem `:5000`; `TOTEM_TOKEN` igual nos dois lados |
+| Totem não gera senha | Nos ajustes do totem: endereço sem `:5000` e `TOTEM_TOKEN` igual ao do servidor |
 | Alterei `PLACE_NAME`/`LOGO_URL` e nada mudou | Esses valores entram no build: rode `up -d --build` |
 | Porta 80 ocupada | Outro serviço (apache/nginx) no servidor: pare-o ou use `HTTP_PORT=8080` |

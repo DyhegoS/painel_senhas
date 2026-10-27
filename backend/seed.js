@@ -1,6 +1,8 @@
 // Uso: node seed.js            -> apaga serviços e senhas e recria os dados de teste
 //      node seed.js --if-empty -> só cria os dados se ainda não houver serviços
 //      node seed.js --force    -> permite rodar com NODE_ENV=production
+//      node seed.js --services-only -> só cria os tipos de atendimento (sem senhas de teste)
+//                                      e só se ainda não houver nenhum; pode rodar em produção
 const mongoose = require('mongoose');
 require('dotenv').config();
 
@@ -12,8 +14,12 @@ const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/painel
 
 const TEST_TICKETS_PER_SERVICE = 5;
 
+const servicesOnly = process.argv.includes('--services-only');
+const ifEmpty = servicesOnly || process.argv.includes('--if-empty');
+
 async function seedDatabase() {
-  if (process.env.NODE_ENV === 'production' && !process.argv.includes('--force')) {
+  // --services-only não apaga nada, por isso é permitido em produção
+  if (process.env.NODE_ENV === 'production' && !servicesOnly && !process.argv.includes('--force')) {
     console.error('❌ NODE_ENV=production: o seed apaga todas as senhas. Use --force se tiver certeza.');
     process.exit(1);
   }
@@ -23,15 +29,17 @@ async function seedDatabase() {
     await mongoose.connect(MONGODB_URI);
     console.log('✓ Conectado ao MongoDB');
 
-    if (process.argv.includes('--if-empty') && (await ServiceType.exists({}))) {
+    if (ifEmpty && (await ServiceType.exists({}))) {
       console.log('ℹ Serviços já cadastrados, nada a fazer');
       return;
     }
 
-    // Limpar coleções existentes
-    await ServiceType.deleteMany({});
-    await Ticket.deleteMany({});
-    console.log('✓ Coleções limpas');
+    // Limpar coleções existentes (com --services-only não há serviços e as senhas ficam)
+    if (!servicesOnly) {
+      await ServiceType.deleteMany({});
+      await Ticket.deleteMany({});
+      console.log('✓ Coleções limpas');
+    }
 
     // Inserir tipos de serviço
     const services = await ServiceType.insertMany([
@@ -86,10 +94,15 @@ async function seedDatabase() {
     ].map((service) => ({
       ...service,
       priority: inferPriority(service.name),
-      counter: TEST_TICKETS_PER_SERVICE,
+      counter: servicesOnly ? 0 : TEST_TICKETS_PER_SERVICE,
     })));
 
     console.log(`✓ ${services.length} tipos de serviço criados`);
+
+    if (servicesOnly) {
+      services.forEach((s) => console.log(`  - ${s.prefix}: ${s.name}`));
+      return;
+    }
 
     // Criar algumas senhas de teste
     const testTickets = [];

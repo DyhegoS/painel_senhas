@@ -1,0 +1,5 @@
+# Projetos nativos gerados por `expo prebuild` (scripts/build-apk.sh) a partir do app.json
+/android
+/ios
+# APKs gerados
+/dist
