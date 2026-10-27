@@ -1,6 +1,6 @@
 # 🚀 ROADMAP - Sistema de Painel de Senhas
 
-## ✅ v1.0.0 - MVP (ATUAL)
+## ✅ v1.0.0 - MVP
 
 ### Backend
 
@@ -36,74 +36,77 @@
 
 ---
 
-## 📋 v1.1.0 - SEGURANÇA E AUTENTICAÇÃO
+## ✅ v1.1.0 - SEGURANÇA E AUTENTICAÇÃO
 
 ### Backend
 
-- [ ] Autenticação JWT para atendentes
-- [ ] Login de funcionários
-- [ ] Roles/Permissions (Admin, Atendente, Visualizador)
-- [ ] Hash de senhas
-- [ ] Rate limiting
-- [ ] CORS refinado
-- [ ] Validação de entrada (sanitização)
-- [ ] Logs de auditoria
+- [x] Autenticação JWT para atendentes (sessão em cookie httpOnly)
+- [x] Login de funcionários
+- [x] Roles/Permissions (Administrador, Supervisor, Atendente, Médico)
+- [x] Hash de senhas (bcrypt)
+- [x] Rate limiting (login e geração de senhas)
+- [x] CORS refinado (`CORS_ORIGIN`)
+- [x] Validação de entrada (campos permitidos, ids, transições de status)
+- [ ] Logs de auditoria (hoje só há log no console para zerar filas)
 
 ### Frontend
 
-- [ ] Tela de login (Atendente)
-- [ ] Gerenciamento de tokens
-- [ ] Logout
-- [ ] Proteção de rotas
+- [x] Tela de login (Atendente)
+- [x] Gerenciamento de sessão
+- [x] Logout
+- [x] Proteção de rotas (abas por perfil)
 
 ### Database
 
-- [ ] Modelo de Usuário
+- [x] Modelo de Usuário
 - [ ] Tabela de logs de auditoria
 
 ---
 
-## 📊 v1.2.0 - ANALYTICS E RELATÓRIOS
+## ✅ v1.2.0 - ANALYTICS E RELATÓRIOS
 
 ### Backend
 
-- [ ] Cálculo de tempo médio de espera
-- [ ] Cálculo de tempo médio de atendimento
-- [ ] Taxa de abandono
-- [ ] Pico de horário
-- [ ] Endpoint de relatórios
+- [x] Cálculo de tempo médio de espera
+- [x] Cálculo de tempo médio de atendimento
+- [x] Taxa de abandono (pacientes ausentes)
+- [x] Pico de horário
+- [x] Endpoint de relatórios
 
 ### Web Admin
 
-- [ ] Dashboard com gráficos
-- [ ] Relatório por período
-- [ ] Análise por serviço
-- [ ] Performance de atendentes
-- [ ] Exportar para PDF/CSV
+- [x] Dashboard com gráficos (horários de pico)
+- [x] Relatório por período
+- [x] Análise por serviço
+- [x] Performance de atendentes (aba Tempos de atendimento)
+- [x] Exportar para CSV
+- [ ] Exportar para PDF
 
 ### Features
 
-- [ ] Filtragem por data
-- [ ] Filtragem por serviço
+- [x] Filtragem por data
+- [x] Filtragem por atendente
+- [ ] Filtragem por serviço (hoje o relatório mostra todos os serviços lado a lado)
 - [ ] Comparação de períodos
 
 ---
 
-## 👥 v1.3.0 - GESTÃO DE RECURSOS HUMANOS
+## 👥 v1.3.0 - GESTÃO DE RECURSOS HUMANOS (parcial)
 
 ### Backend
 
-- [ ] Modelo de Atendente
-- [ ] Modelo de Guichê/Sala
-- [ ] Atribuição de atendentes a guichês
-- [ ] Status do atendente (online, offline, pausa)
-- [ ] Histórico de atendimentos por pessoa
+- [x] Local de atendimento (Guichê/Consultório/Sala + número) no cadastro do usuário
+- [x] Usuários conectados e quem está em atendimento agora
+- [x] Histórico de atendimentos por pessoa
+- [ ] Status de pausa do atendente
+- [ ] Modelo de Guichê/Sala independente do usuário
 
 ### Web Admin
 
-- [ ] Tela de gerenciamento de atendentes
+- [x] Tela de gerenciamento de usuários
+- [x] Equipe cadastrada
+- [x] Performance individual (tempos de atendimento)
 - [ ] Atribuição de turnos
-- [ ] Performance individual
 - [ ] Disponibilidade
 
 ### Features
@@ -114,18 +117,18 @@
 
 ---
 
-## 🎯 v1.4.0 - PRIORIZAÇÃO AVANÇADA
+## 🎯 v1.4.0 - PRIORIZAÇÃO AVANÇADA (parcial)
 
 ### Backend
 
+- [x] Prioridade por tipo de atendimento
+- [x] Atendimento preferencial (80+ antes de preferencial, antes de normal)
+- [x] Fila com múltiplas prioridades ("Qualquer fila" no acionador)
 - [ ] Senioridade de cliente (VIP, regular, novo)
-- [ ] Prioridade por tipo de atendimento
-- [ ] Atendimento preferencial para idosos/gestantes
-- [ ] Fila com múltiplas prioridades
 
 ### Mobile
 
-- [ ] Marcar como VIP/Preferencial
+- [x] Botões com cor por prioridade (80+, preferencial, normal)
 - [ ] Dados de perfil do cliente
 - [ ] Histórico de atendimentos
 
@@ -133,6 +136,39 @@
 
 - [ ] Badge de prioridade visual
 - [ ] Filtrar fila por prioridade
+
+---
+
+## ✅ IMPLEMENTADO FORA DO ROADMAP ORIGINAL
+
+### Atendimento
+
+- [x] Acionador de senhas em janela própria, com chamada pelo número e rechamada
+- [x] Cronômetro do atendimento no acionador
+- [x] Perfil Supervisor (só consulta: relatórios, equipe, conectados e status)
+- [x] Zerar filas manualmente, com reinício da numeração
+- [x] Reinício automático das filas e da numeração à meia-noite
+
+### Painel TV
+
+- [x] Anúncio por voz (senha, letras, números e local)
+- [x] Som sempre ativo, sem botão
+- [x] Vários painéis sincronizados (restaura a tela ao abrir ou reconectar)
+- [x] Relógio pela hora do servidor
+- [x] Nome do local e logotipo configuráveis
+
+### Totem
+
+- [x] Impressão em impressora térmica (agente de impressão em Linux/Raspberry Pi)
+- [x] APK Android em modo totem, com tela de ajustes protegida por PIN
+- [x] Volta sozinho para a escolha de serviço após 10 segundos
+- [x] Token do totem e da impressora
+
+### Infraestrutura
+
+- [x] Testes automatizados do backend
+- [x] Deploy de produção com Docker, nginx e backup
+- [x] Status do sistema (servidor, banco, dispositivos conectados)
 
 ---
 
@@ -255,17 +291,24 @@
 
 ## 📌 PRIORIDADES
 
-### Curto Prazo (Próximas 2-3 sprints)
+### Concluído
 
 1. ✅ MVP funcional
-2. 🔜 Autenticação e segurança
-3. 🔜 Dashboard simples
+2. ✅ Autenticação e segurança
+3. ✅ Relatórios e tempos de atendimento
+4. ✅ Prioridade entre filas
 
-### Médio Prazo (1-2 meses)
+### Curto Prazo (sugestão)
 
-1. Analytics e relatórios
-2. Gestão de atendentes
-3. Notificações
+1. Logs de auditoria (quem criou/alterou usuários, zerou filas etc.)
+2. Pausa do atendente e badge de prioridade no acionador
+3. Filtro por serviço e comparação de períodos nos relatórios
+
+### Médio Prazo
+
+1. Gestão de turnos e guichês
+2. Notificações
+3. Exportação em PDF
 
 ### Longo Prazo (3+ meses)
 
@@ -284,5 +327,4 @@
 
 ---
 
-**Última atualização:** 2024-01-01
-**Próxima revisão:** 2024-02-01
+**Última atualização:** 2026-10-27
