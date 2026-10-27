@@ -254,6 +254,36 @@ async function resetQueues({ serviceTypeId, resetNumbering }) {
   return { cancelled: result.modifiedCount, resetNumbering: Boolean(resetNumbering) };
 }
 
+// Virada do dia: cancela as senhas pendentes de dias anteriores e reinicia a numeração em 001.
+// Pode rodar quantas vezes for preciso (na inicialização e a cada minuto): só age uma vez por dia.
+async function startNewDay(now = new Date()) {
+  const todayStart = startOfToday(DEFAULT_TIMEZONE, now);
+
+  const cancelled = await Ticket.updateMany(
+    { status: { $in: PENDING_STATUSES }, createdAt: { $lt: todayStart } },
+    { status: 'cancelled' }
+  );
+
+  const services = await ServiceType.find({
+    $or: [{ counterResetAt: null }, { counterResetAt: { $lt: todayStart } }],
+  });
+  let servicesReset = 0;
+  for (const service of services) {
+    // Já saiu senha hoje (ex.: servidor ligado depois da meia-noite): mantém a sequência do dia
+    // eslint-disable-next-line no-await-in-loop
+    if (await Ticket.exists({ serviceType: service._id, createdAt: { $gte: todayStart } })) continue;
+    // Só reinicia se o contador não mudou desde a leitura (uma senha gerada agora não é perdida)
+    // eslint-disable-next-line no-await-in-loop
+    const result = await ServiceType.updateOne(
+      { _id: service._id, counter: service.counter },
+      { counter: 0, counterResetAt: now }
+    );
+    servicesReset += result.modifiedCount;
+  }
+
+  return { cancelled: cancelled.modifiedCount, servicesReset };
+}
+
 // Estado geral: servidor, banco, dispositivos conectados e movimento do dia
 async function getStatus({ clients, startedAt }) {
   const dbStates = ['desconectado', 'conectado', 'conectando', 'desconectando'];
@@ -359,6 +389,7 @@ module.exports = {
   getServiceTimes,
   getInService,
   resetQueues,
+  startNewDay,
   getStatus,
   getConnections,
 };

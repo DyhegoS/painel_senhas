@@ -10,9 +10,8 @@ function validTimezone(timezone) {
   }
 }
 
-// Meia-noite de hoje no fuso informado (o servidor pode estar em UTC)
-function startOfToday(timezone) {
-  const now = new Date();
+// Meia-noite do dia de `now` no fuso informado (o servidor pode estar em UTC)
+function startOfToday(timezone = DEFAULT_TIMEZONE, now = new Date()) {
   const parts = new Intl.DateTimeFormat('en-US', {
     timeZone: validTimezone(timezone),
     hourCycle: 'h23',
@@ -25,4 +24,11 @@ function startOfToday(timezone) {
   return new Date(now.getTime() - elapsedMs - now.getMilliseconds());
 }
 
-module.exports = { DEFAULT_TIMEZONE, validTimezone, startOfToday };
+// Próxima meia-noite no fuso informado (26 h depois do início do dia já é o dia seguinte,
+// mesmo em dias de 23 ou 25 h por horário de verão)
+function nextMidnight(timezone = DEFAULT_TIMEZONE, now = new Date()) {
+  const today = startOfToday(timezone, now);
+  return startOfToday(timezone, new Date(today.getTime() + 26 * 60 * 60 * 1000));
+}
+
+module.exports = { DEFAULT_TIMEZONE, validTimezone, startOfToday, nextMidnight };

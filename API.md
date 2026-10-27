@@ -113,6 +113,14 @@ Response:
 }
 ```
 
+### Reinício automático à meia-noite
+
+Todo dia à meia-noite (fuso `REPORT_TIMEZONE`) o backend cancela as senhas que ficaram pendentes
+e reinicia a numeração de cada serviço em 001. Se o servidor estiver desligado à meia-noite, o
+reinício acontece quando ele ligar. Um serviço que já emitiu senha no dia mantém a sequência.
+Ao reiniciar, emite `queue_update` e `new_day` (os painéis da TV limpam as chamadas do dia
+anterior). Desative com `AUTO_RESET=false`.
+
 ### Encerrar (`finish`, `absent`, `cancel`)
 
 - `finish` e `absent` só valem para senhas **chamadas**; `cancel` vale para aguardando ou chamadas.
@@ -186,4 +194,5 @@ socket.on('ticket_called', (ticket) => {}); // senha chamada/rechamada (mesmo fo
 socket.on('queue_update', (queue) => {}); // fila completa, igual a GET /tickets/queue
 socket.on('ticket_status_update', ({ ticketId, status }) => {}); // mudança de status de uma senha
 socket.on('print_ticket', (ticket, ack) => {}); // só para impressoras; responder ack({ ok })
+socket.on('new_day', () => {}); // filas reiniciadas à meia-noite
 ```

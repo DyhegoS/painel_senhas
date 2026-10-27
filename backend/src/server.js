@@ -7,6 +7,7 @@ const { createApp, corsOptions } = require('./app');
 const { setupSockets } = require('./socket');
 const { ensureAdmin } = require('./controllers/userController');
 const { initServices } = require('./controllers/ticketController');
+const { scheduleDailyReset } = require('./scheduler');
 const Ticket = require('./models/Ticket');
 
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/painel_senhas';
@@ -29,6 +30,9 @@ async function start() {
     console.error('✗ Erro ao conectar MongoDB:', error);
     process.exit(1);
   }
+
+  // Depois de initServices: o reinício usa o contador já migrado
+  scheduleDailyReset(io);
 
   server.listen(PORT, () => {
     console.log(`🚀 Servidor rodando em http://localhost:${PORT}`);

@@ -221,6 +221,7 @@ GENERATE_RATE_LIMIT=30       # senhas por minuto por IP
 PRINT_AGENT_TOKEN=           # segredo compartilhado com o print-agent
 COOKIE_SECURE=false          # true quando servido por HTTPS
 TRUST_PROXY=                 # nº de proxies reversos na frente (ex.: 1)
+AUTO_RESET=true              # zera filas e numeração à meia-noite (false = só manual)
 
 # MongoDB Atlas (alternativa)
 # MONGODB_URI=mongodb+srv://username:password@cluster.mongodb.net/painel_senhas

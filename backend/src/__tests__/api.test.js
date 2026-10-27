@@ -11,6 +11,8 @@ const Ticket = require('../models/Ticket');
 const User = require('../models/User');
 const { signToken } = require('../middleware/auth');
 const ticketController = require('../controllers/ticketController');
+const adminController = require('../controllers/adminController');
+const { startOfToday, nextMidnight } = require('../time');
 
 jest.setTimeout(60000);
 
@@ -300,6 +302,61 @@ describe('supervisor', () => {
       number: 'C-001',
       attendant: { name: 'Ana', locationNumber: '4' },
     });
+  });
+});
+
+describe('reinício automático à meia-noite', () => {
+  const hoursAgo = (h) => new Date(Date.now() - h * 60 * 60 * 1000);
+  const yesterday = () => new Date(startOfToday().getTime() - 2 * 60 * 60 * 1000);
+
+  it('calcula a meia-noite no fuso de São Paulo, mesmo com o servidor em UTC', () => {
+    const tz = 'America/Sao_Paulo';
+    // 12:00 em Brasília (15:00 UTC) -> próxima meia-noite é 03:00 UTC do dia seguinte
+    expect(nextMidnight(tz, new Date('2026-10-27T15:00:00Z')).toISOString()).toBe(
+      '2026-10-28T03:00:00.000Z'
+    );
+    // 23:30 em Brasília ainda é o dia 27 (embora já seja dia 28 em UTC)
+    expect(startOfToday(tz, new Date('2026-10-28T02:30:00Z')).toISOString()).toBe(
+      '2026-10-27T03:00:00.000Z'
+    );
+  });
+
+  it('cancela as pendentes de ontem e reinicia a numeração', async () => {
+    await ServiceType.updateOne({ _id: service._id }, { counter: 57, counterResetAt: hoursAgo(48) });
+    const pendingYesterday = await Ticket.create({
+      number: 'C-057',
+      serviceType: service._id,
+      createdAt: yesterday(),
+    });
+    const attendedYesterday = await Ticket.create({
+      number: 'C-056',
+      serviceType: service._id,
+      status: 'attended',
+      createdAt: yesterday(),
+    });
+
+    const result = await adminController.startNewDay();
+    expect(result).toEqual({ cancelled: 1, servicesReset: 1 });
+    expect((await Ticket.findById(pendingYesterday._id)).status).toBe('cancelled');
+    expect((await Ticket.findById(attendedYesterday._id)).status).toBe('attended');
+    expect((await generate()).body.number).toBe('C-001');
+  });
+
+  it('não reinicia a numeração se o serviço já emitiu senha hoje', async () => {
+    await ServiceType.updateOne({ _id: service._id }, { counterResetAt: hoursAgo(48) });
+    await generate(); // C-001 de hoje, ainda aguardando
+    await generate(); // C-002
+
+    const result = await adminController.startNewDay();
+    expect(result).toEqual({ cancelled: 0, servicesReset: 0 });
+    expect((await generate()).body.number).toBe('C-003');
+    expect(await Ticket.countDocuments({ status: 'waiting' })).toBe(3);
+  });
+
+  it('só age uma vez por dia', async () => {
+    await ServiceType.updateOne({ _id: service._id }, { counter: 9, counterResetAt: hoursAgo(48) });
+    expect((await adminController.startNewDay()).servicesReset).toBe(1);
+    expect(await adminController.startNewDay()).toEqual({ cancelled: 0, servicesReset: 0 });
   });
 });
 

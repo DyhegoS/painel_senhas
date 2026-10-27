@@ -63,7 +63,8 @@ function QueueReset() {
         <h2>Zerar filas</h2>
         <p className="report-note">
           Cancela as senhas que ainda estão aguardando ou em chamada. Use, por exemplo, no fim do
-          expediente. As senhas canceladas continuam aparecendo nos relatórios.
+          expediente. As senhas canceladas continuam aparecendo nos relatórios. Todo dia à
+          meia-noite o sistema faz isso automaticamente e reinicia a numeração em 001.
         </p>
 
         <div className="user-form reset-form">

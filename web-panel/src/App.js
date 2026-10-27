@@ -224,6 +224,8 @@ function App() {
 
     socket.on('connect', loadRecentCalls);
     socket.on('connect', loadQueue);
+    // Meia-noite: o servidor reiniciou as filas; recarrega para limpar as chamadas de ontem
+    socket.on('new_day', loadRecentCalls);
 
     return () => socket.disconnect();
   }, [addToCalledTickets, playBeep, playTicketAudio]);
