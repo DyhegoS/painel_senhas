@@ -2,7 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || `http://${window.location.hostname}:5000`;
+// Em produção o nginx serve o painel e encaminha /api e /socket.io para o backend
+const SOCKET_URL =
+  process.env.REACT_APP_SOCKET_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? window.location.origin
+    : `http://${window.location.hostname}:5000`);
 const COUNTER_NUMBER = '1';
 const AUDIO_BASE = `${process.env.PUBLIC_URL}/audio`;
 const PLACE_NAME = process.env.REACT_APP_PLACE_NAME || 'Sala de Espera';

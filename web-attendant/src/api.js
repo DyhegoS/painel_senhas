@@ -1,7 +1,12 @@
 import axios from 'axios';
 
+// Em produção o nginx serve a página e encaminha /api e /socket.io para o backend
+// (mesmo endereço); em desenvolvimento o backend roda separado na porta 5000
 export const SOCKET_URL =
-  process.env.REACT_APP_SOCKET_URL || `http://${window.location.hostname}:5000`;
+  process.env.REACT_APP_SOCKET_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? window.location.origin
+    : `http://${window.location.hostname}:5000`);
 export const API_URL = process.env.REACT_APP_API_URL || `${SOCKET_URL}/api`;
 
 // A sessão fica num cookie httpOnly definido pelo backend (a página não tem acesso ao token).

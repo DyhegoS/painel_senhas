@@ -1,0 +1,11 @@
+# Contexto da imagem web (deploy/web.Dockerfile): só os front-ends e a config do nginx
+**/node_modules
+**/build
+.git
+.claude
+.spec
+backend
+mobile
+print-agent
+deploy/.env
+*.log

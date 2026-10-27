@@ -1,0 +1,62 @@
+# Produção (servidor Ubuntu na rede local). Veja deploy/README.md.
+#   docker compose -f docker-compose.prod.yml --env-file deploy/.env up -d --build
+# Só a porta 80 (nginx) fica exposta; MongoDB e backend ficam na rede interna do Docker.
+
+services:
+  mongodb:
+    # CPUs sem AVX (máquinas antigas) não rodam o MongoDB 5+: use MONGO_IMAGE=mongo:4.4
+    image: ${MONGO_IMAGE:-mongo:7.0}
+    restart: unless-stopped
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - painel_network
+    healthcheck:
+      test: ['CMD-SHELL', 'mongosh --quiet --eval "db.adminCommand(\"ping\")" || mongo --quiet --eval "db.adminCommand(\"ping\")"']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    env_file: deploy/.env
+    environment:
+      NODE_ENV: production
+      PORT: 5000
+      MONGODB_URI: mongodb://mongodb:27017/painel_senhas
+      # O nginx fica na frente: req.ip passa a ser o IP real do cliente
+      TRUST_PROXY: 1
+    networks:
+      - painel_network
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://127.0.0.1:5000/api/health']
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: deploy/web.Dockerfile
+      args:
+        REACT_APP_PLACE_NAME: ${PLACE_NAME:-}
+        REACT_APP_LOGO_URL: ${LOGO_URL:-}
+        REACT_APP_TIMEZONE: ${REPORT_TIMEZONE:-America/Sao_Paulo}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - '${HTTP_PORT:-80}:80'
+    networks:
+      - painel_network
+
+volumes:
+  mongodb_data:
+
+networks:
+  painel_network:

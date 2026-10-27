@@ -94,6 +94,9 @@ docker-compose logs -f
 docker-compose down
 ```
 
+> Este `docker-compose.yml` é para desenvolvimento. Para colocar em **produção** num servidor
+> Ubuntu, siga [deploy/README.md](deploy/README.md).
+
 ---
 
 ## 🗄️ Banco de Dados
