@@ -1,0 +1,14 @@
+[Unit]
+Description=Painel de Senhas - Tunel USB do celular
+After=painel-proxy.service
+
+[Service]
+# Chave do adb autorizada no celular fica em /root/.android
+Environment=HOME=/root
+# O adb reverse se perde quando o celular desconecta ou reinicia; reaplica a cada 10 s
+ExecStart=/bin/sh -c 'while true; do adb wait-for-device; adb reverse tcp:8080 tcp:8080 >/dev/null 2>&1; sleep 10; done'
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

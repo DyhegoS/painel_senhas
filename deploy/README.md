@@ -53,7 +53,7 @@ Preencha pelo menos:
 
 - `JWT_SECRET`: gere com `openssl rand -hex 32`
 - `ADMIN_PASSWORD`: senha do primeiro administrador
-- `PRINT_AGENT_TOKEN`: gere com `openssl rand -hex 16` (o mesmo valor vai no Raspberry Pi)
+- `PRINT_AGENT_TOKEN`: gere com `openssl rand -hex 16` (o mesmo valor vai no agente de impressão do totem)
 - `PLACE_NAME`: nome que aparece no painel da TV
 
 **Confira se a CPU suporta o MongoDB 7:**
@@ -109,8 +109,11 @@ google-chrome --kiosk --autoplay-policy=no-user-gesture-required http://<IP>/pai
 
 **Totem (APK Android):** instale o APK e, na primeira abertura, informe o endereço `<IP>` e o
 `TOTEM_TOKEN` (se configurado) na tela de ajustes do app. Veja [mobile/README.md](../mobile/README.md).
+Para ligar o celular por cabo USB no computador do totem, sem Wi-Fi, veja a seção
+"Celular ligado por USB" do [print-agent/README.md](../print-agent/README.md).
 
-**Agente de impressão (Raspberry Pi):** em `print-agent/painel-print.service`:
+**Agente de impressão (Raspberry Pi ou PC Debian do totem):** instale seguindo o
+[print-agent/README.md](../print-agent/README.md) e, em `/etc/systemd/system/painel-print.service`:
 
 ```
 Environment=BACKEND_URL=http://<IP>

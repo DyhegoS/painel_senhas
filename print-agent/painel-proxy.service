@@ -1,0 +1,13 @@
+[Unit]
+Description=Painel de Senhas - Repasse do celular (USB) para o servidor
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# Ajuste para o IP do servidor que roda o backend
+ExecStart=/usr/bin/socat TCP-LISTEN:8080,bind=127.0.0.1,fork,reuseaddr TCP:192.168.0.10:80
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
